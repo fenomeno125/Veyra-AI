@@ -29,21 +29,25 @@ function App() {
 
   function deleteChat(id) {
     setChats((previous) => previous.filter((chat) => chat.id !== id));
-    if (activeId === id) setActiveId(null);
+
+    if (activeId === id) {
+      setActiveId(null);
+    }
   }
 
   async function sendMessage(text = message) {
     const content = text.trim();
+
     if (!content || loading) return;
 
     const id = activeId || crypto.randomUUID();
-    const oldChat = chats.find((chat) => chat.id === id);
-
+    const existingChat = chats.find((chat) => chat.id === id);
     const userMessage = { role: "user", content };
-    const updatedChat = oldChat
+
+    const updatedChat = existingChat
       ? {
-          ...oldChat,
-          messages: [...oldChat.messages, userMessage],
+          ...existingChat,
+          messages: [...existingChat.messages, userMessage],
         }
       : {
           id,
@@ -52,8 +56,10 @@ function App() {
         };
 
     setChats((previous) =>
-      oldChat
-        ? previous.map((chat) => (chat.id === id ? updatedChat : chat))
+      existingChat
+        ? previous.map((chat) =>
+            chat.id === id ? updatedChat : chat
+          )
         : [updatedChat, ...previous]
     );
 
@@ -64,8 +70,12 @@ function App() {
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedChat.messages }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: updatedChat.messages,
+        }),
       });
 
       if (!response.ok) {
@@ -86,7 +96,10 @@ function App() {
                 ...chat,
                 messages: [
                   ...chat.messages,
-                  { role: "assistant", content: answer },
+                  {
+                    role: "assistant",
+                    content: answer,
+                  },
                 ],
               }
             : chat
@@ -103,7 +116,7 @@ function App() {
                   {
                     role: "assistant",
                     content:
-                      "Non riesco a collegarmi al server AI. Controlla la configurazione di /api/chat.",
+                      "Non riesco a collegarmi al server AI. Controlla che /api/chat sia configurato correttamente.",
                   },
                 ],
               }
@@ -126,12 +139,18 @@ function App() {
             <span>Veyra</span>
           </div>
 
-          <button className="new-chat-button" onClick={newChat}>
+          <button
+            type="button"
+            className="new-chat-button"
+            onClick={newChat}
+          >
             <Plus size={18} />
-            Nuova chat
+            <span>Nuova chat</span>
           </button>
 
-          <div className="sidebar-section-title">LE TUE CHAT</div>
+          <div className="sidebar-section-title">
+            LE TUE CHAT
+          </div>
 
           <div className="chat-history">
             {chats.map((chat) => (
@@ -142,16 +161,24 @@ function App() {
                 }`}
               >
                 <button
+                  type="button"
                   className="history-select"
-                  onClick={() => setActiveId(chat.id)}
+                  onClick={() => {
+                    setActiveId(chat.id);
+                    setMessage("");
+                  }}
+                  title={chat.title}
                 >
                   <MessageSquare size={16} />
                   <span>{chat.title}</span>
                 </button>
+
                 <button
+                  type="button"
                   className="history-delete"
                   onClick={() => deleteChat(chat.id)}
                   aria-label="Elimina chat"
+                  title="Elimina chat"
                 >
                   <Trash2 size={15} />
                 </button>
@@ -174,13 +201,16 @@ function App() {
       <main className="veyra-main">
         <header className="veyra-header">
           <button
+            type="button"
             className="icon-button"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Apri o chiudi menu"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label="Apri o chiudi il menu"
           >
             <Menu size={20} />
           </button>
+
           <div className="header-title">Veyra AI</div>
+
           <div className="status-label">
             <span className="status-dot" />
             AI Assistant
@@ -193,13 +223,17 @@ function App() {
               <div className="welcome-icon">
                 <Sparkles size={30} />
               </div>
+
               <h1>Come posso aiutarti?</h1>
+
               <p>
-                Sono Veyra, il tuo assistente AI. Da dove vuoi iniziare?
+                Sono Veyra, il tuo assistente AI.
+                Scegli un suggerimento oppure scrivi un messaggio.
               </p>
 
               <div className="suggestion-grid">
                 <button
+                  type="button"
                   className="suggestion-card"
                   onClick={() => sendMessage("Aiutami a studiare")}
                 >
@@ -209,6 +243,7 @@ function App() {
                 </button>
 
                 <button
+                  type="button"
                   className="suggestion-card"
                   onClick={() => sendMessage("Dammi idee creative")}
                 >
@@ -218,8 +253,11 @@ function App() {
                 </button>
 
                 <button
+                  type="button"
                   className="suggestion-card"
-                  onClick={() => sendMessage("Aiutami a scrivere un testo")}
+                  onClick={() =>
+                    sendMessage("Aiutami a scrivere un testo")
+                  }
                 >
                   <span className="suggestion-icon">✎</span>
                   <strong>Scrivere</strong>
@@ -227,9 +265,12 @@ function App() {
                 </button>
 
                 <button
+                  type="button"
                   className="suggestion-card"
                   onClick={() =>
-                    sendMessage("Spiegami l'intelligenza artificiale")
+                    sendMessage(
+                      "Spiegami l'intelligenza artificiale"
+                    )
                   }
                 >
                   <span className="suggestion-icon">⌘</span>
@@ -244,7 +285,9 @@ function App() {
                 <div className="message-row" key={index}>
                   <div
                     className={`message-avatar ${
-                      item.role === "user" ? "user-avatar" : "ai-avatar"
+                      item.role === "user"
+                        ? "user-avatar"
+                        : "ai-avatar"
                     }`}
                   >
                     {item.role === "user" ? (
@@ -253,11 +296,14 @@ function App() {
                       <Bot size={18} />
                     )}
                   </div>
+
                   <div className="message-body">
                     <div className="message-author">
                       {item.role === "user" ? "Tu" : "Veyra"}
                     </div>
-                    <div className="message-content">{item.content}</div>
+                    <div className="message-content">
+                      {item.content}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -269,7 +315,9 @@ function App() {
                   </div>
                   <div className="message-body">
                     <div className="message-author">Veyra</div>
-                    <div className="message-content">Sto pensando...</div>
+                    <div className="message-content">
+                      Sto pensando...
+                    </div>
                   </div>
                 </div>
               )}
@@ -289,7 +337,10 @@ function App() {
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey
+                ) {
                   event.preventDefault();
                   sendMessage();
                 }
@@ -300,9 +351,18 @@ function App() {
             />
 
             <div className="composer-controls">
-              <span className="composer-hint">
-                Invio per inviare · Maiusc + Invio per andare a capo
-              </span>
+              <div className="composer-left">
+                <button
+                  type="button"
+                  className="tool-plus-button"
+                  onClick={newChat}
+                  title="Nuova chat"
+                  aria-label="Nuova chat"
+                >
+                  <Plus size={21} />
+                </button>
+              </div>
+
               <button
                 type="submit"
                 className="send-button"
@@ -313,6 +373,7 @@ function App() {
               </button>
             </div>
           </form>
+
           <p className="composer-disclaimer">
             Veyra AI può commettere errori. Verifica le informazioni importanti.
           </p>
