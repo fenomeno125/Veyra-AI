@@ -1,3 +1,4 @@
+```javascript
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
 
@@ -9,7 +10,7 @@ export default async function handler(req, res) {
   }
 
   const key = process.env.GROQ_API_KEY;
-  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  const model = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
   if (!key) {
     return res.status(503).json({
@@ -90,3 +91,4 @@ export default async function handler(req, res) {
     });
   }
 }
+```
