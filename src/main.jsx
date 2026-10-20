@@ -1,31 +1,219 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Sparkles, Plus, Settings2, ArrowUp, X, ImagePlus,
-  Images, FileText, Globe, Code2, GraduationCap,
-  Search, Paperclip, WandSparkles, LoaderCircle
+  Sparkles, Plus, Settings2, ArrowUp, X, ImagePlus, Images,
+  FileText, Globe, Code2, GraduationCap, Search, Paperclip,
+  LoaderCircle, PanelLeftClose, PanelLeft, Compass, FolderKanban,
+  Clock3, CalendarClock, Library, Blocks, Terminal, MoreHorizontal,
+  Pencil, Trash2, MessageSquare, Menu
 } from 'lucide-react';
 import './style.css';
 
+const STORAGE_KEY = 'veyra-conversations-v1';
+
 const tools = [
-  { id: 'image', label: 'Crea un’immagine', desc: 'Genera immagini da una descrizione', icon: ImagePlus },
-  { id: 'vision', label: 'Analizza un’immagine', desc: 'Carica una foto da esaminare', icon: Images },
-  { id: 'files', label: 'Allega documenti', desc: 'Seleziona immagini e documenti', icon: Paperclip },
-  { id: 'web', label: 'Cerca sul web', desc: 'Ricerca online con fonti', icon: Globe },
+  { id: 'image', label: 'Crea un’immagine', desc: 'Prepara una descrizione per un’immagine', icon: ImagePlus },
+  { id: 'vision', label: 'Analizza un’immagine', desc: 'Seleziona un’immagine da esaminare', icon: Images },
+  { id: 'files', label: 'Allega documenti', desc: 'Immagini, PDF e file di testo', icon: Paperclip },
+  { id: 'web', label: 'Cerca sul web', desc: 'Ricerca online', icon: Globe },
   { id: 'study', label: 'Studia e impara', desc: 'Spiegazioni ed esercizi', icon: GraduationCap },
   { id: 'code', label: 'Aiuto con il codice', desc: 'Scrivi e correggi programmi', icon: Code2 }
 ];
 
+const shortcuts = [
+  { label: 'Esplora', icon: Compass },
+  { label: 'Progetti', icon: FolderKanban },
+  { label: 'Recenti', icon: Clock3 },
+  { label: 'Immagini', icon: Images },
+  { label: 'Programmate', icon: CalendarClock },
+  { label: 'Libreria', icon: Library },
+  { label: 'Plugin', icon: Blocks },
+  { label: 'Codex', icon: Terminal }
+];
+
+function newConversation() {
+  return {
+    id: crypto.randomUUID(),
+    title: 'Nuova chat',
+    messages: [],
+    updatedAt: Date.now()
+  };
+}
+
+function readConversations() {
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function getTitle(messages) {
+  const first = messages.find(m => m.role === 'user')?.content || '';
+  return first.length > 38 ? first.slice(0, 38) + '…' : first || 'Nuova chat';
+}
+
+function MessageContent({ content }) {
+  // Visualizzazione sicura di testo, elenchi e blocchi di codice.
+  // Non interpreta HTML fornito dal modello.
+  const blocks = String(content || '').split(/```/);
+
+  return (
+    <div className="message-content">
+      {blocks.map((block, index) => {
+        if (index % 2 === 1) {
+          const lines = block.split('\n');
+          const language = lines[0].trim();
+          const code = language && !language.includes(' ')
+            ? lines.slice(1).join('\n')
+            : block;
+
+          return (
+            <pre className="code-block" key={index}>
+              <div className="code-header">
+                <span>{language || 'Codice'}</span>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard?.writeText(code)}
+                >
+                  Copia
+                </button>
+              </div>
+              <code>{code}</code>
+            </pre>
+          );
+        }
+
+        return (
+          <div key={index} className="text-block">
+            {block.split('\n').map((line, lineIndex) => {
+              const trimmed = line.trim();
+              if (!trimmed) return <div className="line-space" key={lineIndex} />;
+
+              if (/^#{1,3}\s/.test(trimmed)) {
+                const heading = trimmed.replace(/^#{1,3}\s/, '');
+                return <h3 key={lineIndex}>{formatInline(heading)}</h3>;
+              }
+
+              if (/^[-*]\s/.test(trimmed)) {
+                return <div className="formatted-list" key={lineIndex}>
+                  <span>•</span><span>{formatInline(trimmed.slice(2))}</span>
+                </div>;
+              }
+
+              if (/^\d+[.)]\s/.test(trimmed)) {
+                const item = trimmed.replace(/^\d+[.)]\s/, '');
+                return <div className="formatted-list" key={lineIndex}>
+                  <span>{trimmed.match(/^\d+/)[0]}.</span><span>{formatInline(item)}</span>
+                </div>;
+              }
+
+              return <p key={lineIndex}>{formatInline(trimmed)}</p>;
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatInline(text) {
+  const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|\*[^*]+\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code className="inline-code" key={i}>{part.slice(1, -1)}</code>;
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    return part;
+  });
+}
+
 function App() {
-  const [msgs, setMsgs] = useState([]);
+  const [conversations, setConversations] = useState(readConversations);
+  const [activeId, setActiveId] = useState(() => readConversations()[0]?.id || null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const [attachments, setAttachments] = useState([]);
   const [notice, setNotice] = useState('');
+  const [section, setSection] = useState('Chat');
+  const [menuId, setMenuId] = useState(null);
+
   const fileRef = useRef(null);
   const imageRef = useRef(null);
+  const endRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  const active = conversations.find(c => c.id === activeId);
+  const msgs = active?.messages || [];
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+    } catch {
+      setNotice('Spazio di salvataggio esaurito. Prova a eliminare alcune conversazioni.');
+    }
+  }, [conversations]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [msgs, busy]);
+
+  function updateActive(messages) {
+    setConversations(old => old.map(c =>
+      c.id === activeId
+        ? { ...c, messages, title: getTitle(messages), updatedAt: Date.now() }
+        : c
+    ));
+  }
+
+  function startChat() {
+    const chat = newConversation();
+    setConversations(old => [chat, ...old]);
+    setActiveId(chat.id);
+    setText('');
+    clearAttachments();
+    setNotice('');
+    setSection('Chat');
+    setShowTools(false);
+  }
+
+  function openChat(id) {
+    setActiveId(id);
+    setSection('Chat');
+    setNotice('');
+    setMenuId(null);
+  }
+
+  function deleteChat(id) {
+    const remaining = conversations.filter(c => c.id !== id);
+    setConversations(remaining);
+    if (activeId === id) {
+      setActiveId(remaining[0]?.id || null);
+    }
+    setMenuId(null);
+  }
+
+  function renameChat(id) {
+    const current = conversations.find(c => c.id === id);
+    const name = window.prompt('Nuovo nome della conversazione:', current?.title || '');
+    if (name?.trim()) {
+      setConversations(old => old.map(c =>
+        c.id === id ? { ...c, title: name.trim() } : c
+      ));
+    }
+    setMenuId(null);
+  }
 
   function addFiles(fileList) {
     const selected = Array.from(fileList || []);
@@ -34,21 +222,19 @@ function App() {
       file.type === 'application/pdf' ||
       file.type.startsWith('text/')
     );
-    const rejected = selected.length - allowed.length;
-
     const available = Math.max(0, 5 - attachments.length);
     const accepted = allowed.slice(0, available).map(file => ({
-      id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+      id: crypto.randomUUID(),
       file,
       url: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
     }));
 
     setAttachments(old => [...old, ...accepted]);
 
-    if (rejected || allowed.length > available) {
+    if (selected.length !== allowed.length || allowed.length > available) {
       setNotice('Puoi allegare fino a 5 file. Sono supportate immagini, PDF e file di testo.');
     } else if (accepted.length) {
-      setNotice('File selezionati. In questa versione gli allegati non vengono ancora analizzati dall’IA.');
+      setNotice('Anteprima pronta. Gli allegati non vengono ancora inviati al modello.');
     }
 
     if (fileRef.current) fileRef.current.value = '';
@@ -64,10 +250,12 @@ function App() {
   }
 
   function clearAttachments() {
-    attachments.forEach(item => {
-      if (item.url) URL.revokeObjectURL(item.url);
+    setAttachments(old => {
+      old.forEach(item => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+      return [];
     });
-    setAttachments([]);
   }
 
   async function send(value = text) {
@@ -75,15 +263,29 @@ function App() {
     if ((!prompt && !attachments.length) || busy) return;
 
     if (attachments.length) {
-      setNotice('Gli allegati sono selezionati, ma il backend attuale invia soltanto testo. Rimuovi gli allegati oppure invia un messaggio testuale.');
+      setNotice('Gli allegati sono visibili in anteprima, ma il backend attuale invia solo testo. Per analizzarli dobbiamo collegare un modello compatibile.');
       if (!prompt) return;
     }
 
-    const next = [...msgs, { role: 'user', content: prompt }];
-    setMsgs(next);
+    let chatId = activeId;
+    if (!chatId) {
+      const chat = newConversation();
+      chatId = chat.id;
+      setConversations(old => [chat, ...old]);
+      setActiveId(chat.id);
+    }
+
+    const current = conversations.find(c => c.id === chatId);
+    const next = [...(current?.messages || []), { role: 'user', content: prompt }];
+    setConversations(old => old.map(c => c.id === chatId
+      ? { ...c, messages: next, title: getTitle(next), updatedAt: Date.now() }
+      : c
+    ));
+
     setText('');
     setBusy(true);
     setShowTools(false);
+    clearAttachments();
 
     try {
       const response = await fetch('/api/chat', {
@@ -94,28 +296,34 @@ function App() {
 
       const raw = await response.text();
       let data;
-
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error('Il server ha restituito una risposta non valida. Controlla i log di Vercel.');
+        throw new Error('Risposta del server non valida. Controlla i log di Vercel.');
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Errore del server.');
-      }
+      if (!response.ok) throw new Error(data.error || 'Errore del server.');
 
-      setMsgs(current => [...current, {
-        role: 'assistant',
-        content: data.reply || 'Non ho ricevuto una risposta.'
-      }]);
+      const reply = data.reply || 'Non ho ricevuto una risposta.';
+      setConversations(old => old.map(c => {
+        if (c.id !== chatId) return c;
+        const messages = [...c.messages, { role: 'assistant', content: reply }];
+        return { ...c, messages, updatedAt: Date.now() };
+      }));
     } catch (error) {
-      setMsgs(current => [...current, {
-        role: 'assistant',
-        content: 'Veyra non riesce a rispondere: ' + error.message
-      }]);
+      setConversations(old => old.map(c => c.id === chatId
+        ? {
+            ...c,
+            messages: [...c.messages, {
+              role: 'assistant',
+              content: 'Non riesco a rispondere: ' + error.message
+            }]
+          }
+        : c
+      ));
     } finally {
       setBusy(false);
+      textareaRef.current?.focus();
     }
   }
 
@@ -126,193 +334,286 @@ function App() {
       fileRef.current?.click();
       return;
     }
-
     if (id === 'vision') {
       imageRef.current?.click();
       return;
     }
 
-    const messages = {
-      image: 'La generazione di immagini non è ancora collegata. Serve integrare un servizio di generazione immagini.',
-      web: 'La ricerca web non è ancora collegata. Serve integrare un servizio di ricerca online.',
-      study: 'Aiutami a studiare e a capire un argomento con esempi semplici.',
+    const prompts = {
+      image: 'Vorrei creare un’immagine. Aiutami a preparare una descrizione dettagliata.',
+      web: 'Vorrei cercare informazioni aggiornate sul web.',
+      study: 'Aiutami a studiare e capire un argomento con esempi semplici.',
       code: 'Aiutami a scrivere o correggere del codice.'
     };
 
-    if (id === 'study' || id === 'code') {
-      setText(messages[id]);
-      return;
+    if (id === 'image' || id === 'web') {
+      setNotice(id === 'image'
+        ? 'La generazione di immagini non è ancora collegata. Per crearle serve integrare un servizio dedicato.'
+        : 'La ricerca web non è ancora collegata. Le risposte attuali non effettuano ricerche online.');
     }
-
-    setNotice(messages[id] || 'Questo strumento non è ancora disponibile.');
+    setText(prompts[id] || '');
+    textareaRef.current?.focus();
   }
 
-  const prompts = [
+  const visibleChats = conversations
+    .filter(c => c.title.toLowerCase().includes(searchText.toLowerCase()))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const promptCards = [
     ['📚', 'Studiare', 'Spiegami un argomento difficile con esempi semplici.'],
     ['✍️', 'Scrivere', 'Aiutami a scrivere un testo chiaro e coinvolgente.'],
     ['⌨️', 'Programmare', 'Aiutami a risolvere un problema di programmazione.'],
     ['💡', 'Idee', 'Dammi 10 idee originali per un progetto digitale.']
   ];
 
+  function selectSection(label) {
+    setSection(label);
+    setNotice(label === 'Immagini'
+      ? 'Qui prepareremo gli strumenti per generare e analizzare immagini.'
+      : label === 'Programmate'
+      ? 'Le attività programmate non sono ancora disponibili.'
+      : label === 'Plugin'
+      ? 'I plugin saranno disponibili quando verranno collegati a servizi reali.'
+      : label === 'Codex'
+      ? 'L’area Codex è in preparazione.'
+      : '');
+    if (label === 'Recenti') setSection('Chat');
+  }
+
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <h2 className="brand"><Sparkles /> Veyra <span>AI</span></h2>
+    <div className={`app ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+      {sidebarOpen && (
+        <aside className="sidebar">
+          <div className="sidebar-head">
+            <button className="brand" onClick={startChat} aria-label="Veyra, nuova chat">
+              <Sparkles size={23} /> <span>veyra</span>
+            </button>
+            <button className="icon-button" onClick={() => setSidebarOpen(false)} aria-label="Nascondi barra laterale">
+              <PanelLeftClose size={19} />
+            </button>
+          </div>
 
-        <button className="new-chat" onClick={() => {
-          setMsgs([]);
-          setText('');
-          clearAttachments();
-          setNotice('');
-        }}>
-          <Plus size={18} /> Nuova chat
-        </button>
+          <button className="side-action" onClick={startChat}><Plus size={19} /> Nuova chat</button>
 
-        <p className="eyebrow">IL TUO ASSISTENTE</p>
-        <div className="sidebar-note">
-          Un unico spazio per idee, studio, scrittura e programmazione.
-        </div>
-
-        <div className="sidebar-bottom">
-          <button className="settings-button" onClick={() => setShowSettings(true)}>
-            <Settings2 size={18} /> Impostazioni
+          <button className={`side-action ${section === 'Esplora' ? 'selected' : ''}`} onClick={() => selectSection('Esplora')}>
+            <Compass size={18} /> Esplora
           </button>
-        </div>
-      </aside>
+          <button className={`side-action ${section === 'Progetti' ? 'selected' : ''}`} onClick={() => selectSection('Progetti')}>
+            <FolderKanban size={18} /> Progetti
+          </button>
+
+          <div className="history-heading">
+            <span>Recenti</span>
+            <button className="icon-button small" onClick={() => setSearchOpen(v => !v)} aria-label="Cerca cronologia">
+              <Search size={17} />
+            </button>
+          </div>
+
+          {searchOpen && (
+            <input
+              className="history-search"
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="Cerca conversazioni..."
+              autoFocus
+            />
+          )}
+
+          <div className="history-list">
+            {visibleChats.map(chat => (
+              <div className={`history-item ${chat.id === activeId ? 'active' : ''}`} key={chat.id}>
+                <button className="history-open" onClick={() => openChat(chat.id)} title={chat.title}>
+                  <MessageSquare size={15} />
+                  <span>{chat.title}</span>
+                </button>
+                <button className="icon-button history-menu-button" onClick={() => setMenuId(menuId === chat.id ? null : chat.id)} aria-label="Opzioni conversazione">
+                  <MoreHorizontal size={17} />
+                </button>
+                {menuId === chat.id && (
+                  <div className="history-menu">
+                    <button onClick={() => renameChat(chat.id)}><Pencil size={14} /> Rinomina</button>
+                    <button onClick={() => deleteChat(chat.id)}><Trash2 size={14} /> Elimina</button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {!visibleChats.length && <p className="empty-history">Nessuna conversazione.</p>}
+          </div>
+
+          <div className="sidebar-links">
+            {shortcuts.slice(3).map(item => {
+              const Icon = item.icon;
+              return (
+                <button key={item.label} className="side-action" onClick={() => selectSection(item.label)}>
+                  <Icon size={18} /> {item.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="sidebar-bottom">
+            <button className="side-action" onClick={() => setShowSettings(true)}>
+              <Settings2 size={18} /> Impostazioni
+            </button>
+          </div>
+        </aside>
+      )}
 
       <main className="main">
         <header className="topbar">
-          <div className="status-dot" />
-          <b>Veyra AI</b>
-          <span className="topbar-label">Assistente</span>
-          <button className="icon-button top-settings" onClick={() => setShowSettings(true)} aria-label="Impostazioni">
+          {!sidebarOpen && (
+            <>
+              <button className="icon-button" onClick={() => setSidebarOpen(true)} aria-label="Mostra barra laterale">
+                <PanelLeft size={20} />
+              </button>
+              <button className="icon-button" onClick={startChat} aria-label="Nuova chat">
+                <Plus size={20} />
+              </button>
+            </>
+          )}
+          <div className="topbar-title">
+            <span className="status-dot" />
+            <b>Veyra</b>
+            <span className="topbar-label">AI</span>
+          </div>
+          <button className="icon-button" onClick={() => setShowSettings(true)} aria-label="Impostazioni">
             <Settings2 size={19} />
           </button>
         </header>
 
-        <section className="conversation">
-          {!msgs.length ? (
-            <div className="welcome">
-              <div className="hero"><Sparkles size={30} /></div>
-              <small className="eyebrow">IL TUO SPAZIO PER LE IDEE</small>
-              <h1>Ciao, sono Veyra<span>.</span></h1>
-              <p>Su cosa vuoi lavorare oggi?</p>
-
-              <div className="cards">
-                {prompts.map(([icon, title, prompt]) => (
-                  <button key={title} onClick={() => send(prompt)}>
-                    <strong>{icon} {title}</strong>
-                    <small>{prompt}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="messages">
-              {msgs.map((message, index) => (
-                <article className={`message ${message.role}`} key={index}>
-                  <b>{message.role === 'assistant' ? '✦ Veyra' : 'Tu'}</b>
-                  <p>{message.content}</p>
-                </article>
-              ))}
-              {busy && (
-                <div className="thinking"><LoaderCircle className="spin" size={17} /> Veyra sta pensando…</div>
-              )}
-            </div>
-          )}
-        </section>
-
-        <div className="composer-area">
-          {notice && (
-            <div className="notice">
-              <span>{notice}</span>
-              <button className="icon-button" onClick={() => setNotice('')} aria-label="Chiudi avviso"><X size={16} /></button>
-            </div>
-          )}
-
-          {attachments.length > 0 && (
-            <div className="attachments">
-              {attachments.map(item => (
-                <div className="attachment" key={item.id}>
-                  {item.url
-                    ? <img src={item.url} alt={item.file.name} />
-                    : <FileText size={24} />}
-                  <span title={item.file.name}>{item.file.name}</span>
-                  <button className="remove-file" onClick={() => removeAttachment(item.id)} aria-label={`Rimuovi ${item.file.name}`}>
-                    <X size={15} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <form className="composer" onSubmit={event => {
-            event.preventDefault();
-            send();
-          }}>
-            <div className="plus-wrap">
-              <button type="button" className="plus-button" onClick={() => setShowTools(value => !value)} aria-label="Apri strumenti">
-                <Plus size={22} />
+        {section !== 'Chat' ? (
+          <section className="section-page">
+            <div className="section-symbol"><Sparkles size={27} /></div>
+            <h1>{section}</h1>
+            <p>Questa sezione è pronta per essere sviluppata.</p>
+            {section === 'Immagini' && (
+              <button className="primary-button" onClick={() => imageRef.current?.click()}>
+                <ImagePlus size={18} /> Seleziona un’immagine da provare
               </button>
-
-              {showTools && (
-                <div className="tools-menu">
-                  <h3>Strumenti Veyra</h3>
-                  {tools.map(tool => {
-                    const Icon = tool.icon;
-                    return (
-                      <button type="button" className="tool-option" key={tool.id} onClick={() => chooseTool(tool.id)}>
-                        <span className="tool-icon"><Icon size={19} /></span>
-                        <span className="tool-copy">
-                          <b>{tool.label}</b>
-                          <small>{tool.desc}</small>
-                        </span>
+            )}
+            <button className="secondary-button" onClick={() => setSection('Chat')}>Torna alla chat</button>
+          </section>
+        ) : (
+          <>
+            <section className="conversation" key={activeId || 'welcome'}>
+              {!msgs.length ? (
+                <div className="welcome">
+                  <div className="hero"><Sparkles size={29} /></div>
+                  <h1>Ciao, sono Veyra<span>.</span></h1>
+                  <p>Su cosa vuoi lavorare oggi?</p>
+                  <div className="cards">
+                    {promptCards.map(([icon, title, prompt]) => (
+                      <button key={title} onClick={() => send(prompt)}>
+                        <strong>{icon} {title}</strong>
+                        <small>{prompt}</small>
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="messages">
+                  {msgs.map((message, index) => (
+                    <article className={`message ${message.role}`} key={`${activeId}-${index}`}>
+                      {message.role === 'assistant' && <div className="assistant-mark"><Sparkles size={17} /></div>}
+                      <div className="message-body">
+                        <b>{message.role === 'assistant' ? 'Veyra' : 'Tu'}</b>
+                        <MessageContent content={message.content} />
+                      </div>
+                    </article>
+                  ))}
+                  {busy && <div className="thinking"><LoaderCircle className="spin" size={18} /> Veyra sta pensando…</div>}
+                  <div ref={endRef} />
                 </div>
               )}
+            </section>
+
+            <div className="composer-area">
+              {notice && (
+                <div className="notice">
+                  <span>{notice}</span>
+                  <button className="icon-button" onClick={() => setNotice('')} aria-label="Chiudi avviso"><X size={16} /></button>
+                </div>
+              )}
+
+              {attachments.length > 0 && (
+                <div className="attachments">
+                  {attachments.map(item => (
+                    <div className="attachment" key={item.id}>
+                      {item.url ? <img src={item.url} alt={item.file.name} /> : <FileText size={23} />}
+                      <span title={item.file.name}>{item.file.name}</span>
+                      <button className="remove-file" onClick={() => removeAttachment(item.id)} aria-label={`Rimuovi ${item.file.name}`}>
+                        <X size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <form className="composer" onSubmit={e => { e.preventDefault(); send(); }}>
+                <div className="plus-wrap">
+                  <button type="button" className="plus-button" onClick={() => setShowTools(v => !v)} aria-label="Apri strumenti">
+                    <Plus size={22} />
+                  </button>
+                  {showTools && (
+                    <div className="tools-menu">
+                      <h3>Strumenti</h3>
+                      {tools.map(tool => {
+                        const Icon = tool.icon;
+                        return (
+                          <button type="button" className="tool-option" key={tool.id} onClick={() => chooseTool(tool.id)}>
+                            <span className="tool-icon"><Icon size={19} /></span>
+                            <span className="tool-copy"><b>{tool.label}</b><small>{tool.desc}</small></span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <textarea
+                  ref={textareaRef}
+                  rows="1"
+                  value={text}
+                  onChange={e => {
+                    setText(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      send();
+                    }
+                  }}
+                  placeholder="Scrivi un messaggio a Veyra..."
+                />
+                <button className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
+                  {busy ? <LoaderCircle className="spin" size={20} /> : <ArrowUp size={21} />}
+                </button>
+              </form>
+
+              <input ref={fileRef} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.csv" onChange={e => addFiles(e.target.files)} />
+              <input ref={imageRef} type="file" hidden accept="image/*" onChange={e => addFiles(e.target.files)} />
+              <footer>Veyra può commettere errori. Verifica le informazioni importanti.</footer>
             </div>
-
-            <textarea
-              rows="1"
-              value={text}
-              onChange={event => setText(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  send();
-                }
-              }}
-              placeholder="Scrivi un messaggio a Veyra..."
-            />
-
-            <button className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
-              {busy ? <LoaderCircle className="spin" size={20} /> : <ArrowUp size={21} />}
-            </button>
-          </form>
-
-          <input ref={fileRef} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.csv" onChange={event => addFiles(event.target.files)} />
-          <input ref={imageRef} type="file" hidden accept="image/*" multiple onChange={event => addFiles(event.target.files)} />
-
-          <footer>Veyra può commettere errori. Verifica le informazioni importanti.</footer>
-        </div>
+          </>
+        )}
       </main>
 
       {showSettings && (
         <div className="overlay" onClick={() => setShowSettings(false)}>
-          <div className="modal" onClick={event => event.stopPropagation()}>
-            <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi">✕</button>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi"><X size={19} /></button>
             <div className="modal-icon"><Settings2 size={23} /></div>
             <h2>Impostazioni Veyra</h2>
-            <p>Le risposte testuali usano Groq tramite una funzione server.</p>
+            <p>Le risposte testuali usano Groq tramite il backend del progetto.</p>
             <div className="info-box">
               <b>Configurazione server</b>
-              <p>La variabile <code>GROQ_API_KEY</code> deve essere impostata su Vercel. Non inserirla mai in questo file.</p>
+              <p>La variabile GROQ_API_KEY deve restare nelle variabili d'ambiente di Vercel. Non inserirla nel frontend.</p>
             </div>
             <div className="info-box">
-              <b>Strumenti in sviluppo</b>
-              <p>La generazione di immagini, la ricerca web e l'analisi dei file richiedono integrazioni aggiuntive.</p>
+              <b>Strumenti</b>
+              <p>La ricerca web, la generazione di immagini e l'analisi delle immagini richiedono integrazioni server aggiuntive.</p>
             </div>
             <button className="primary-button" onClick={() => setShowSettings(false)}>Ho capito</button>
           </div>
