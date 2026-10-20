@@ -99,5 +99,5 @@ function App() {
                 messages: [
                   ...chat.messages,
                   { role: "assistant", content: answer },
-                ],
-              }
+                  ],
+                }
