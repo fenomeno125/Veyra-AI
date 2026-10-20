@@ -1,4 +1,4 @@
-# Nova AI — versione con API sicura
+# Veyra AI — versione con API sicura
 Chat React/Vite e endpoint server-side Vercel.
 
 1. Sostituisci nel repository i file con quelli di questo ZIP, mantenendo `src/` e `api/`.
