@@ -1,390 +1,325 @@
-import React, { useState } from "react";
-import { createRoot } from "react-dom/client";
+import React, { useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
 import {
-  Plus,
-  MessageSquare,
-  Send,
-  Menu,
-  Sparkles,
-  Trash2,
-  Bot,
-  User,
-} from "lucide-react";
-import "./style.css";
+  Sparkles, Plus, Settings2, ArrowUp, X, ImagePlus,
+  Images, FileText, Globe, Code2, GraduationCap,
+  Search, Paperclip, WandSparkles, LoaderCircle
+} from 'lucide-react';
+import './style.css';
+
+const tools = [
+  { id: 'image', label: 'Crea un’immagine', desc: 'Genera immagini da una descrizione', icon: ImagePlus },
+  { id: 'vision', label: 'Analizza un’immagine', desc: 'Carica una foto da esaminare', icon: Images },
+  { id: 'files', label: 'Allega documenti', desc: 'Seleziona immagini e documenti', icon: Paperclip },
+  { id: 'web', label: 'Cerca sul web', desc: 'Ricerca online con fonti', icon: Globe },
+  { id: 'study', label: 'Studia e impara', desc: 'Spiegazioni ed esercizi', icon: GraduationCap },
+  { id: 'code', label: 'Aiuto con il codice', desc: 'Scrivi e correggi programmi', icon: Code2 }
+];
 
 function App() {
-  const [chats, setChats] = useState([]);
-  const [activeId, setActiveId] = useState(null);
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [msgs, setMsgs] = useState([]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [notice, setNotice] = useState('');
+  const fileRef = useRef(null);
+  const imageRef = useRef(null);
 
-  const activeChat = chats.find((chat) => chat.id === activeId);
-  const messages = activeChat ? activeChat.messages : [];
-
-  function newChat() {
-    setActiveId(null);
-    setMessage("");
-  }
-
-  function deleteChat(id) {
-    setChats((previous) => previous.filter((chat) => chat.id !== id));
-
-    if (activeId === id) {
-      setActiveId(null);
-    }
-  }
-
-  async function sendMessage(text = message) {
-    const content = text.trim();
-
-    if (!content || loading) return;
-
-    const id = activeId || crypto.randomUUID();
-    const existingChat = chats.find((chat) => chat.id === id);
-    const userMessage = { role: "user", content };
-
-    const updatedChat = existingChat
-      ? {
-          ...existingChat,
-          messages: [...existingChat.messages, userMessage],
-        }
-      : {
-          id,
-          title: content.slice(0, 35),
-          messages: [userMessage],
-        };
-
-    setChats((previous) =>
-      existingChat
-        ? previous.map((chat) =>
-            chat.id === id ? updatedChat : chat
-          )
-        : [updatedChat, ...previous]
+  function addFiles(fileList) {
+    const selected = Array.from(fileList || []);
+    const allowed = selected.filter(file =>
+      file.type.startsWith('image/') ||
+      file.type === 'application/pdf' ||
+      file.type.startsWith('text/')
     );
+    const rejected = selected.length - allowed.length;
 
-    setActiveId(id);
-    setMessage("");
-    setLoading(true);
+    const available = Math.max(0, 5 - attachments.length);
+    const accepted = allowed.slice(0, available).map(file => ({
+      id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+      file,
+      url: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+    }));
+
+    setAttachments(old => [...old, ...accepted]);
+
+    if (rejected || allowed.length > available) {
+      setNotice('Puoi allegare fino a 5 file. Sono supportate immagini, PDF e file di testo.');
+    } else if (accepted.length) {
+      setNotice('File selezionati. In questa versione gli allegati non vengono ancora analizzati dall’IA.');
+    }
+
+    if (fileRef.current) fileRef.current.value = '';
+    if (imageRef.current) imageRef.current.value = '';
+  }
+
+  function removeAttachment(id) {
+    setAttachments(old => {
+      const item = old.find(file => file.id === id);
+      if (item?.url) URL.revokeObjectURL(item.url);
+      return old.filter(file => file.id !== id);
+    });
+  }
+
+  function clearAttachments() {
+    attachments.forEach(item => {
+      if (item.url) URL.revokeObjectURL(item.url);
+    });
+    setAttachments([]);
+  }
+
+  async function send(value = text) {
+    const prompt = value.trim();
+    if ((!prompt && !attachments.length) || busy) return;
+
+    if (attachments.length) {
+      setNotice('Gli allegati sono selezionati, ma il backend attuale invia soltanto testo. Rimuovi gli allegati oppure invia un messaggio testuale.');
+      if (!prompt) return;
+    }
+
+    const next = [...msgs, { role: 'user', content: prompt }];
+    setMsgs(next);
+    setText('');
+    setBusy(true);
+    setShowTools(false);
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: updatedChat.messages,
-        }),
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: next.slice(-30) })
       });
 
-      if (!response.ok) {
-        throw new Error("Server non disponibile");
+      const raw = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error('Il server ha restituito una risposta non valida. Controlla i log di Vercel.');
       }
 
-      const data = await response.json();
-      const answer =
-        data.reply ||
-        data.message ||
-        data.content ||
-        "Non ho ricevuto una risposta valida.";
+      if (!response.ok) {
+        throw new Error(data.error || 'Errore del server.');
+      }
 
-      setChats((previous) =>
-        previous.map((chat) =>
-          chat.id === id
-            ? {
-                ...chat,
-                messages: [
-                  ...chat.messages,
-                  {
-                    role: "assistant",
-                    content: answer,
-                  },
-                ],
-              }
-            : chat
-        )
-      );
+      setMsgs(current => [...current, {
+        role: 'assistant',
+        content: data.reply || 'Non ho ricevuto una risposta.'
+      }]);
     } catch (error) {
-      setChats((previous) =>
-        previous.map((chat) =>
-          chat.id === id
-            ? {
-                ...chat,
-                messages: [
-                  ...chat.messages,
-                  {
-                    role: "assistant",
-                    content:
-                      "Non riesco a collegarmi al server AI. Controlla che /api/chat sia configurato correttamente.",
-                  },
-                ],
-              }
-            : chat
-        )
-      );
+      setMsgs(current => [...current, {
+        role: 'assistant',
+        content: 'Veyra non riesce a rispondere: ' + error.message
+      }]);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
+  function chooseTool(id) {
+    setShowTools(false);
+
+    if (id === 'files') {
+      fileRef.current?.click();
+      return;
+    }
+
+    if (id === 'vision') {
+      imageRef.current?.click();
+      return;
+    }
+
+    const messages = {
+      image: 'La generazione di immagini non è ancora collegata. Serve integrare un servizio di generazione immagini.',
+      web: 'La ricerca web non è ancora collegata. Serve integrare un servizio di ricerca online.',
+      study: 'Aiutami a studiare e a capire un argomento con esempi semplici.',
+      code: 'Aiutami a scrivere o correggere del codice.'
+    };
+
+    if (id === 'study' || id === 'code') {
+      setText(messages[id]);
+      return;
+    }
+
+    setNotice(messages[id] || 'Questo strumento non è ancora disponibile.');
+  }
+
+  const prompts = [
+    ['📚', 'Studiare', 'Spiegami un argomento difficile con esempi semplici.'],
+    ['✍️', 'Scrivere', 'Aiutami a scrivere un testo chiaro e coinvolgente.'],
+    ['⌨️', 'Programmare', 'Aiutami a risolvere un problema di programmazione.'],
+    ['💡', 'Idee', 'Dammi 10 idee originali per un progetto digitale.']
+  ];
+
   return (
-    <div className="veyra-app">
-      {sidebarOpen && (
-        <aside className="veyra-sidebar">
-          <div className="sidebar-brand">
-            <div className="brand-icon">
-              <Sparkles size={20} />
-            </div>
-            <span>Veyra</span>
-          </div>
+    <div className="app">
+      <aside className="sidebar">
+        <h2 className="brand"><Sparkles /> Veyra <span>AI</span></h2>
 
-          <button
-            type="button"
-            className="new-chat-button"
-            onClick={newChat}
-          >
-            <Plus size={18} />
-            <span>Nuova chat</span>
+        <button className="new-chat" onClick={() => {
+          setMsgs([]);
+          setText('');
+          clearAttachments();
+          setNotice('');
+        }}>
+          <Plus size={18} /> Nuova chat
+        </button>
+
+        <p className="eyebrow">IL TUO ASSISTENTE</p>
+        <div className="sidebar-note">
+          Un unico spazio per idee, studio, scrittura e programmazione.
+        </div>
+
+        <div className="sidebar-bottom">
+          <button className="settings-button" onClick={() => setShowSettings(true)}>
+            <Settings2 size={18} /> Impostazioni
           </button>
+        </div>
+      </aside>
 
-          <div className="sidebar-section-title">
-            LE TUE CHAT
-          </div>
-
-          <div className="chat-history">
-            {chats.map((chat) => (
-              <div
-                key={chat.id}
-                className={`history-item ${
-                  activeId === chat.id ? "active" : ""
-                }`}
-              >
-                <button
-                  type="button"
-                  className="history-select"
-                  onClick={() => {
-                    setActiveId(chat.id);
-                    setMessage("");
-                  }}
-                  title={chat.title}
-                >
-                  <MessageSquare size={16} />
-                  <span>{chat.title}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="history-delete"
-                  onClick={() => deleteChat(chat.id)}
-                  aria-label="Elimina chat"
-                  title="Elimina chat"
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div className="sidebar-footer">
-            <div className="avatar-small">
-              <Sparkles size={16} />
-            </div>
-            <div>
-              <strong>Veyra AI</strong>
-              <span>Il tuo assistente</span>
-            </div>
-          </div>
-        </aside>
-      )}
-
-      <main className="veyra-main">
-        <header className="veyra-header">
-          <button
-            type="button"
-            className="icon-button"
-            onClick={() => setSidebarOpen((open) => !open)}
-            aria-label="Apri o chiudi il menu"
-          >
-            <Menu size={20} />
+      <main className="main">
+        <header className="topbar">
+          <div className="status-dot" />
+          <b>Veyra AI</b>
+          <span className="topbar-label">Assistente</span>
+          <button className="icon-button top-settings" onClick={() => setShowSettings(true)} aria-label="Impostazioni">
+            <Settings2 size={19} />
           </button>
-
-          <div className="header-title">Veyra AI</div>
-
-          <div className="status-label">
-            <span className="status-dot" />
-            AI Assistant
-          </div>
         </header>
 
-        <section className="chat-area">
-          {messages.length === 0 ? (
-            <div className="welcome-screen">
-              <div className="welcome-icon">
-                <Sparkles size={30} />
-              </div>
+        <section className="conversation">
+          {!msgs.length ? (
+            <div className="welcome">
+              <div className="hero"><Sparkles size={30} /></div>
+              <small className="eyebrow">IL TUO SPAZIO PER LE IDEE</small>
+              <h1>Ciao, sono Veyra<span>.</span></h1>
+              <p>Su cosa vuoi lavorare oggi?</p>
 
-              <h1>Come posso aiutarti?</h1>
-
-              <p>
-                Sono Veyra, il tuo assistente AI.
-                Scegli un suggerimento oppure scrivi un messaggio.
-              </p>
-
-              <div className="suggestion-grid">
-                <button
-                  type="button"
-                  className="suggestion-card"
-                  onClick={() => sendMessage("Aiutami a studiare")}
-                >
-                  <span className="suggestion-icon">✦</span>
-                  <strong>Studiare</strong>
-                  <span>Spiegazioni semplici e chiare</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="suggestion-card"
-                  onClick={() => sendMessage("Dammi idee creative")}
-                >
-                  <span className="suggestion-icon">✧</span>
-                  <strong>Creare</strong>
-                  <span>Nuove idee e ispirazione</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="suggestion-card"
-                  onClick={() =>
-                    sendMessage("Aiutami a scrivere un testo")
-                  }
-                >
-                  <span className="suggestion-icon">✎</span>
-                  <strong>Scrivere</strong>
-                  <span>Testi e contenuti</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="suggestion-card"
-                  onClick={() =>
-                    sendMessage(
-                      "Spiegami l'intelligenza artificiale"
-                    )
-                  }
-                >
-                  <span className="suggestion-icon">⌘</span>
-                  <strong>Scoprire</strong>
-                  <span>Impara qualcosa di nuovo</span>
-                </button>
+              <div className="cards">
+                {prompts.map(([icon, title, prompt]) => (
+                  <button key={title} onClick={() => send(prompt)}>
+                    <strong>{icon} {title}</strong>
+                    <small>{prompt}</small>
+                  </button>
+                ))}
               </div>
             </div>
           ) : (
-            <div className="messages-list">
-              {messages.map((item, index) => (
-                <div className="message-row" key={index}>
-                  <div
-                    className={`message-avatar ${
-                      item.role === "user"
-                        ? "user-avatar"
-                        : "ai-avatar"
-                    }`}
-                  >
-                    {item.role === "user" ? (
-                      <User size={18} />
-                    ) : (
-                      <Bot size={18} />
-                    )}
-                  </div>
-
-                  <div className="message-body">
-                    <div className="message-author">
-                      {item.role === "user" ? "Tu" : "Veyra"}
-                    </div>
-                    <div className="message-content">
-                      {item.content}
-                    </div>
-                  </div>
-                </div>
+            <div className="messages">
+              {msgs.map((message, index) => (
+                <article className={`message ${message.role}`} key={index}>
+                  <b>{message.role === 'assistant' ? '✦ Veyra' : 'Tu'}</b>
+                  <p>{message.content}</p>
+                </article>
               ))}
-
-              {loading && (
-                <div className="message-row">
-                  <div className="message-avatar ai-avatar">
-                    <Bot size={18} />
-                  </div>
-                  <div className="message-body">
-                    <div className="message-author">Veyra</div>
-                    <div className="message-content">
-                      Sto pensando...
-                    </div>
-                  </div>
-                </div>
+              {busy && (
+                <div className="thinking"><LoaderCircle className="spin" size={17} /> Veyra sta pensando…</div>
               )}
             </div>
           )}
         </section>
 
         <div className="composer-area">
-          <form
-            className="composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              sendMessage();
-            }}
-          >
+          {notice && (
+            <div className="notice">
+              <span>{notice}</span>
+              <button className="icon-button" onClick={() => setNotice('')} aria-label="Chiudi avviso"><X size={16} /></button>
+            </div>
+          )}
+
+          {attachments.length > 0 && (
+            <div className="attachments">
+              {attachments.map(item => (
+                <div className="attachment" key={item.id}>
+                  {item.url
+                    ? <img src={item.url} alt={item.file.name} />
+                    : <FileText size={24} />}
+                  <span title={item.file.name}>{item.file.name}</span>
+                  <button className="remove-file" onClick={() => removeAttachment(item.id)} aria-label={`Rimuovi ${item.file.name}`}>
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <form className="composer" onSubmit={event => {
+            event.preventDefault();
+            send();
+          }}>
+            <div className="plus-wrap">
+              <button type="button" className="plus-button" onClick={() => setShowTools(value => !value)} aria-label="Apri strumenti">
+                <Plus size={22} />
+              </button>
+
+              {showTools && (
+                <div className="tools-menu">
+                  <h3>Strumenti Veyra</h3>
+                  {tools.map(tool => {
+                    const Icon = tool.icon;
+                    return (
+                      <button type="button" className="tool-option" key={tool.id} onClick={() => chooseTool(tool.id)}>
+                        <span className="tool-icon"><Icon size={19} /></span>
+                        <span className="tool-copy">
+                          <b>{tool.label}</b>
+                          <small>{tool.desc}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <textarea
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey
-                ) {
+              rows="1"
+              value={text}
+              onChange={event => setText(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
-                  sendMessage();
+                  send();
                 }
               }}
               placeholder="Scrivi un messaggio a Veyra..."
-              rows={2}
-              aria-label="Scrivi un messaggio"
             />
 
-            <div className="composer-controls">
-              <div className="composer-left">
-                <button
-                  type="button"
-                  className="tool-plus-button"
-                  onClick={newChat}
-                  title="Nuova chat"
-                  aria-label="Nuova chat"
-                >
-                  <Plus size={21} />
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                className="send-button"
-                disabled={!message.trim() || loading}
-                aria-label="Invia messaggio"
-              >
-                <Send size={17} />
-              </button>
-            </div>
+            <button className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
+              {busy ? <LoaderCircle className="spin" size={20} /> : <ArrowUp size={21} />}
+            </button>
           </form>
 
-          <p className="composer-disclaimer">
-            Veyra AI può commettere errori. Verifica le informazioni importanti.
-          </p>
+          <input ref={fileRef} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.csv" onChange={event => addFiles(event.target.files)} />
+          <input ref={imageRef} type="file" hidden accept="image/*" multiple onChange={event => addFiles(event.target.files)} />
+
+          <footer>Veyra può commettere errori. Verifica le informazioni importanti.</footer>
         </div>
       </main>
+
+      {showSettings && (
+        <div className="overlay" onClick={() => setShowSettings(false)}>
+          <div className="modal" onClick={event => event.stopPropagation()}>
+            <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi">✕</button>
+            <div className="modal-icon"><Settings2 size={23} /></div>
+            <h2>Impostazioni Veyra</h2>
+            <p>Le risposte testuali usano Groq tramite una funzione server.</p>
+            <div className="info-box">
+              <b>Configurazione server</b>
+              <p>La variabile <code>GROQ_API_KEY</code> deve essere impostata su Vercel. Non inserirla mai in questo file.</p>
+            </div>
+            <div className="info-box">
+              <b>Strumenti in sviluppo</b>
+              <p>La generazione di immagini, la ricerca web e l'analisi dei file richiedono integrazioni aggiuntive.</p>
+            </div>
+            <button className="primary-button" onClick={() => setShowSettings(false)}>Ho capito</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+createRoot(document.getElementById('root')).render(<App />);
