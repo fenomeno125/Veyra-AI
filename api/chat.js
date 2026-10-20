@@ -3,9 +3,7 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).json({
-      error: "Metodo non consentito."
-    });
+    return res.status(405).json({ error: "Metodo non consentito." });
   }
 
   const key = process.env.GROQ_API_KEY;
@@ -13,16 +11,16 @@ export default async function handler(req, res) {
 
   if (!key) {
     return res.status(503).json({
-      error: "Veyra non è collegata: configura GROQ_API_KEY nelle variabili d'ambiente di Vercel."
+      error: "Configura GROQ_API_KEY nelle variabili d'ambiente di Vercel."
     });
   }
 
   try {
-    const ms = Array.isArray(req.body?.messages)
+    const input = Array.isArray(req.body?.messages)
       ? req.body.messages
       : [];
 
-    if (!ms.length || ms.length > 30) {
+    if (!input.length || input.length > 30) {
       return res.status(400).json({
         error: "Conversazione non valida."
       });
@@ -31,9 +29,9 @@ export default async function handler(req, res) {
     const messages = [
       {
         role: "system",
-        content: "Sei Veyra AI, un assistente utile, chiaro, creativo e onesto. Rispondi nella lingua dell'utente. Aiuta con studio, scrittura, programmazione, idee e pianificazione. Non dichiarare funzioni non disponibili: questa versione non ha ricerca web, allegati o generazione immagini."
+        content: "Sei Veyra AI, un assistente utile, chiaro e onesto. Rispondi nella lingua dell'utente. Aiuta con studio, scrittura, programmazione, idee e pianificazione."
       },
-      ...ms
+      ...input
         .filter(m =>
           ["user", "assistant"].includes(m.role) &&
           typeof m.content === "string"
@@ -44,12 +42,12 @@ export default async function handler(req, res) {
         }))
     ];
 
-    const r = await fetch(
+    const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
         headers: {
-          "Authorization": "Bearer " + key,
+          "Authorization": `Bearer ${key}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -61,33 +59,28 @@ export default async function handler(req, res) {
       }
     );
 
-    const d = await r.json().catch(() => ({}));
+    const data = await response.json().catch(() => ({}));
 
-    if (!r.ok) {
-      console.error("Groq API error:", r.status, d);
+    if (!response.ok) {
+      console.error("Groq API error:", response.status, data);
 
-      return res.status(
-        r.status === 429 ? 429 : 502
-      ).json({
-        error: r.status === 401
-          ? "Chiave Groq non valida. Controlla GROQ_API_KEY su Vercel."
-          : r.status === 429
+      return res.status(response.status === 429 ? 429 : 502).json({
+        error: response.status === 401
+          ? "Chiave Groq non valida: controlla GROQ_API_KEY."
+          : response.status === 429
           ? "Limite di richieste Groq raggiunto. Riprova più tardi."
-          : "Il servizio IA non ha risposto. Controlla la configurazione Groq."
+          : "Errore del servizio IA. Controlla la configurazione Groq."
       });
     }
 
     return res.status(200).json({
-      reply: d.choices?.[0]?.message?.content ||
-        "Nessuna risposta dal modello."
+      reply: data.choices?.[0]?.message?.content || "Nessuna risposta dal modello."
     });
-
-  } catch (e) {
-    console.error("Errore server Veyra:", e);
+  } catch (error) {
+    console.error("Errore server Veyra:", error);
 
     return res.status(500).json({
       error: "Errore temporaneo del server."
     });
   }
 }
-```
