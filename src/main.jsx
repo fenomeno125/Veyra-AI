@@ -5,31 +5,20 @@ import {
   Sparkles, Plus, Settings2, ArrowUp, X, ImagePlus, Images,
   FileText, Globe, Code2, GraduationCap, Search, Paperclip,
   LoaderCircle, PanelLeftClose, PanelLeft, Compass, FolderKanban,
-  Clock3, CalendarClock, Library, Blocks, Terminal, MoreHorizontal,
-  Pencil, Trash2, MessageSquare, Menu
+  Images as ImagesIcon, CalendarClock, Library, Blocks, Terminal,
+  MoreHorizontal, Pencil, Trash2, MessageSquare
 } from 'lucide-react';
 import './style.css';
 
 const STORAGE_KEY = 'veyra-conversations-v1';
 
 const tools = [
-  { id: 'image', label: 'Crea un’immagine', desc: 'Prepara una descrizione per un’immagine', icon: ImagePlus },
-  { id: 'vision', label: 'Analizza un’immagine', desc: 'Seleziona un’immagine da esaminare', icon: Images },
-  { id: 'files', label: 'Allega documenti', desc: 'Immagini, PDF e file di testo', icon: Paperclip },
-  { id: 'web', label: 'Cerca sul web', desc: 'Ricerca online', icon: Globe },
+  { id: 'image', label: 'Crea un’immagine', desc: 'Prepara una descrizione', icon: ImagePlus },
+  { id: 'vision', label: 'Analizza un’immagine', desc: 'Seleziona un’immagine', icon: Images },
+  { id: 'files', label: 'Allega documenti', desc: 'Immagini, PDF e testi', icon: Paperclip },
+  { id: 'web', label: 'Cerca sul web', desc: 'Cerca informazioni online', icon: Globe },
   { id: 'study', label: 'Studia e impara', desc: 'Spiegazioni ed esercizi', icon: GraduationCap },
   { id: 'code', label: 'Aiuto con il codice', desc: 'Scrivi e correggi programmi', icon: Code2 }
-];
-
-const shortcuts = [
-  { label: 'Esplora', icon: Compass },
-  { label: 'Progetti', icon: FolderKanban },
-  { label: 'Recenti', icon: Clock3 },
-  { label: 'Immagini', icon: Images },
-  { label: 'Programmate', icon: CalendarClock },
-  { label: 'Libreria', icon: Library },
-  { label: 'Plugin', icon: Blocks },
-  { label: 'Codex', icon: Terminal }
 ];
 
 function newConversation() {
@@ -43,8 +32,8 @@ function newConversation() {
 
 function readConversations() {
   try {
-    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    return Array.isArray(data) ? data : [];
+    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    return Array.isArray(value) ? value : [];
   } catch {
     return [];
   }
@@ -56,8 +45,6 @@ function getTitle(messages) {
 }
 
 function MessageContent({ content }) {
-  // Visualizzazione sicura di testo, elenchi e blocchi di codice.
-  // Non interpreta HTML fornito dal modello.
   const blocks = String(content || '').split(/```/);
 
   return (
@@ -74,10 +61,7 @@ function MessageContent({ content }) {
             <pre className="code-block" key={index}>
               <div className="code-header">
                 <span>{language || 'Codice'}</span>
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard?.writeText(code)}
-                >
+                <button type="button" onClick={() => navigator.clipboard?.writeText(code)}>
                   Copia
                 </button>
               </div>
@@ -87,30 +71,29 @@ function MessageContent({ content }) {
         }
 
         return (
-          <div key={index} className="text-block">
-            {block.split('\n').map((line, lineIndex) => {
-              const trimmed = line.trim();
-              if (!trimmed) return <div className="line-space" key={lineIndex} />;
+          <div className="text-block" key={index}>
+            {block.split('\n').map((line, i) => {
+              const value = line.trim();
+              if (!value) return <div className="line-space" key={i} />;
 
-              if (/^#{1,3}\s/.test(trimmed)) {
-                const heading = trimmed.replace(/^#{1,3}\s/, '');
-                return <h3 key={lineIndex}>{formatInline(heading)}</h3>;
+              if (/^#{1,3}\s/.test(value)) {
+                return <h3 key={i}>{value.replace(/^#{1,3}\s/, '')}</h3>;
               }
 
-              if (/^[-*]\s/.test(trimmed)) {
-                return <div className="formatted-list" key={lineIndex}>
-                  <span>•</span><span>{formatInline(trimmed.slice(2))}</span>
+              if (/^[-*]\s/.test(value)) {
+                return <div className="formatted-list" key={i}>
+                  <span>•</span><span>{value.slice(2)}</span>
                 </div>;
               }
 
-              if (/^\d+[.)]\s/.test(trimmed)) {
-                const item = trimmed.replace(/^\d+[.)]\s/, '');
-                return <div className="formatted-list" key={lineIndex}>
-                  <span>{trimmed.match(/^\d+/)[0]}.</span><span>{formatInline(item)}</span>
+              if (/^\d+[.)]\s/.test(value)) {
+                return <div className="formatted-list" key={i}>
+                  <span>{value.match(/^\d+/)[0]}.</span>
+                  <span>{value.replace(/^\d+[.)]\s/, '')}</span>
                 </div>;
               }
 
-              return <p key={lineIndex}>{formatInline(trimmed)}</p>;
+              return <p key={i}>{value}</p>;
             })}
           </div>
         );
@@ -119,25 +102,12 @@ function MessageContent({ content }) {
   );
 }
 
-function formatInline(text) {
-  const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|\*[^*]+\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith('`') && part.endsWith('`')) {
-      return <code className="inline-code" key={i}>{part.slice(1, -1)}</code>;
-    }
-    if (part.startsWith('*') && part.endsWith('*')) {
-      return <em key={i}>{part.slice(1, -1)}</em>;
-    }
-    return part;
-  });
-}
-
 function App() {
   const [conversations, setConversations] = useState(readConversations);
-  const [activeId, setActiveId] = useState(() => readConversations()[0]?.id || null);
+
+  // All'apertura mostra la schermata iniziale, senza eliminare la cronologia.
+  const [activeId, setActiveId] = useState(null);
+
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -162,7 +132,7 @@ function App() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
     } catch {
-      setNotice('Spazio di salvataggio esaurito. Prova a eliminare alcune conversazioni.');
+      setNotice('Memoria piena: elimina alcune conversazioni.');
     }
   }, [conversations]);
 
@@ -170,12 +140,11 @@ function App() {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [msgs, busy]);
 
-  function updateActive(messages) {
-    setConversations(old => old.map(c =>
-      c.id === activeId
-        ? { ...c, messages, title: getTitle(messages), updatedAt: Date.now() }
-        : c
-    ));
+  function clearAttachments() {
+    attachments.forEach(item => {
+      if (item.url) URL.revokeObjectURL(item.url);
+    });
+    setAttachments([]);
   }
 
   function startChat() {
@@ -187,6 +156,7 @@ function App() {
     setNotice('');
     setSection('Chat');
     setShowTools(false);
+    setMenuId(null);
   }
 
   function openChat(id) {
@@ -199,9 +169,7 @@ function App() {
   function deleteChat(id) {
     const remaining = conversations.filter(c => c.id !== id);
     setConversations(remaining);
-    if (activeId === id) {
-      setActiveId(remaining[0]?.id || null);
-    }
+    if (activeId === id) setActiveId(null);
     setMenuId(null);
   }
 
@@ -223,8 +191,9 @@ function App() {
       file.type === 'application/pdf' ||
       file.type.startsWith('text/')
     );
-    const available = Math.max(0, 5 - attachments.length);
-    const accepted = allowed.slice(0, available).map(file => ({
+
+    const remaining = Math.max(0, 5 - attachments.length);
+    const accepted = allowed.slice(0, remaining).map(file => ({
       id: crypto.randomUUID(),
       file,
       url: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
@@ -232,10 +201,10 @@ function App() {
 
     setAttachments(old => [...old, ...accepted]);
 
-    if (selected.length !== allowed.length || allowed.length > available) {
-      setNotice('Puoi allegare fino a 5 file. Sono supportate immagini, PDF e file di testo.');
+    if (selected.length !== allowed.length || allowed.length > remaining) {
+      setNotice('Puoi allegare fino a 5 file: immagini, PDF e testi.');
     } else if (accepted.length) {
-      setNotice('Anteprima pronta. Gli allegati non vengono ancora inviati al modello.');
+      setNotice('Allegati in anteprima. Il backend attuale invia solo testo.');
     }
 
     if (fileRef.current) fileRef.current.value = '';
@@ -250,40 +219,38 @@ function App() {
     });
   }
 
-  function clearAttachments() {
-    setAttachments(old => {
-      old.forEach(item => {
-        if (item.url) URL.revokeObjectURL(item.url);
-      });
-      return [];
-    });
-  }
-
   async function send(value = text) {
     const prompt = value.trim();
     if ((!prompt && !attachments.length) || busy) return;
 
     if (attachments.length) {
-      setNotice('Gli allegati sono visibili in anteprima, ma il backend attuale invia solo testo. Per analizzarli dobbiamo collegare un modello compatibile.');
+      setNotice('Gli allegati sono in anteprima, ma non vengono ancora inviati al modello.');
       if (!prompt) return;
     }
 
     let chatId = activeId;
+    let current = conversations.find(c => c.id === chatId);
+
     if (!chatId) {
       const chat = newConversation();
       chatId = chat.id;
+      current = chat;
       setConversations(old => [chat, ...old]);
-      setActiveId(chat.id);
+      setActiveId(chatId);
     }
 
-    const current = conversations.find(c => c.id === chatId);
-    const next = [...(current?.messages || []), { role: 'user', content: prompt }];
+    const next = [
+      ...(current?.messages || []),
+      { role: 'user', content: prompt }
+    ];
+
     setConversations(old => old.map(c => c.id === chatId
       ? { ...c, messages: next, title: getTitle(next), updatedAt: Date.now() }
       : c
     ));
 
     setText('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setBusy(true);
     setShowTools(false);
     clearAttachments();
@@ -297,19 +264,25 @@ function App() {
 
       const raw = await response.text();
       let data;
+
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error('Risposta del server non valida. Controlla i log di Vercel.');
+        throw new Error('Risposta server non valida. Controlla il backend su Vercel.');
       }
 
-      if (!response.ok) throw new Error(data.error || 'Errore del server.');
+      if (!response.ok) {
+        throw new Error(data.error || 'Errore del server.');
+      }
 
       const reply = data.reply || 'Non ho ricevuto una risposta.';
       setConversations(old => old.map(c => {
         if (c.id !== chatId) return c;
-        const messages = [...c.messages, { role: 'assistant', content: reply }];
-        return { ...c, messages, updatedAt: Date.now() };
+        return {
+          ...c,
+          messages: [...c.messages, { role: 'assistant', content: reply }],
+          updatedAt: Date.now()
+        };
       }));
     } catch (error) {
       setConversations(old => old.map(c => c.id === chatId
@@ -335,6 +308,7 @@ function App() {
       fileRef.current?.click();
       return;
     }
+
     if (id === 'vision') {
       imageRef.current?.click();
       return;
@@ -349,9 +323,10 @@ function App() {
 
     if (id === 'image' || id === 'web') {
       setNotice(id === 'image'
-        ? 'La generazione di immagini non è ancora collegata. Per crearle serve integrare un servizio dedicato.'
-        : 'La ricerca web non è ancora collegata. Le risposte attuali non effettuano ricerche online.');
+        ? 'La generazione di immagini richiede un servizio dedicato.'
+        : 'La ricerca web non è ancora collegata al backend.');
     }
+
     setText(prompts[id] || '');
     textareaRef.current?.focus();
   }
@@ -368,17 +343,18 @@ function App() {
   ];
 
   function selectSection(label) {
-    setSection(label);
-    setNotice(label === 'Immagini'
-      ? 'Qui prepareremo gli strumenti per generare e analizzare immagini.'
-      : label === 'Programmate'
-      ? 'Le attività programmate non sono ancora disponibili.'
-      : label === 'Plugin'
-      ? 'I plugin saranno disponibili quando verranno collegati a servizi reali.'
-      : label === 'Codex'
-      ? 'L’area Codex è in preparazione.'
-      : '');
-    if (label === 'Recenti') setSection('Chat');
+    setSection(label === 'Recenti' ? 'Chat' : label);
+    setNotice(
+      label === 'Immagini'
+        ? 'Gli strumenti per immagini sono ancora in preparazione.'
+        : label === 'Programmate'
+        ? 'Le attività programmate non sono ancora disponibili.'
+        : label === 'Plugin'
+        ? 'I plugin saranno disponibili quando saranno collegati a servizi reali.'
+        : label === 'Codex'
+        ? 'L’area Codex è in preparazione.'
+        : ''
+    );
   }
 
   return (
@@ -387,15 +363,17 @@ function App() {
         <aside className="sidebar">
           <div className="sidebar-head">
             <button className="brand" onClick={startChat} aria-label="Veyra, nuova chat">
-              <Sparkles size={23} /> <span>veyra</span>
+              <Sparkles size={23} />
+              <span>veyra</span>
             </button>
             <button className="icon-button" onClick={() => setSidebarOpen(false)} aria-label="Nascondi barra laterale">
               <PanelLeftClose size={19} />
             </button>
           </div>
 
-          <button className="side-action" onClick={startChat}><Plus size={19} /> Nuova chat</button>
-
+          <button className="side-action" onClick={startChat}>
+            <Plus size={19} /> Nuova chat
+          </button>
           <button className={`side-action ${section === 'Esplora' ? 'selected' : ''}`} onClick={() => selectSection('Esplora')}>
             <Compass size={18} /> Esplora
           </button>
@@ -442,14 +420,11 @@ function App() {
           </div>
 
           <div className="sidebar-links">
-            {shortcuts.slice(3).map(item => {
-              const Icon = item.icon;
-              return (
-                <button key={item.label} className="side-action" onClick={() => selectSection(item.label)}>
-                  <Icon size={18} /> {item.label}
-                </button>
-              );
-            })}
+            <button className="side-action" onClick={() => selectSection('Immagini')}><ImagesIcon size={18} /> Immagini</button>
+            <button className="side-action" onClick={() => selectSection('Programmate')}><CalendarClock size={18} /> Programmate</button>
+            <button className="side-action" onClick={() => selectSection('Libreria')}><Library size={18} /> Libreria</button>
+            <button className="side-action" onClick={() => selectSection('Plugin')}><Blocks size={18} /> Plugin</button>
+            <button className="side-action" onClick={() => selectSection('Codex')}><Terminal size={18} /> Codex</button>
           </div>
 
           <div className="sidebar-bottom">
@@ -472,11 +447,13 @@ function App() {
               </button>
             </>
           )}
+
           <div className="topbar-title">
             <span className="status-dot" />
             <b>Veyra</b>
             <span className="topbar-label">AI</span>
           </div>
+
           <button className="icon-button" onClick={() => setShowSettings(true)} aria-label="Impostazioni">
             <Settings2 size={19} />
           </button>
@@ -489,7 +466,7 @@ function App() {
             <p>Questa sezione è pronta per essere sviluppata.</p>
             {section === 'Immagini' && (
               <button className="primary-button" onClick={() => imageRef.current?.click()}>
-                <ImagePlus size={18} /> Seleziona un’immagine da provare
+                <ImagePlus size={18} /> Seleziona un’immagine
               </button>
             )}
             <button className="secondary-button" onClick={() => setSection('Chat')}>Torna alla chat</button>
@@ -499,7 +476,7 @@ function App() {
             <section className="conversation" key={activeId || 'welcome'}>
               {!msgs.length ? (
                 <div className="welcome">
-                  <div className="hero"><Sparkles size={29} /></div>
+                  <div className="hero"><Sparkles size={27} /></div>
                   <h1>Ciao, sono Veyra<span>.</span></h1>
                   <p>Su cosa vuoi lavorare oggi?</p>
                   <div className="cards">
@@ -515,7 +492,9 @@ function App() {
                 <div className="messages">
                   {msgs.map((message, index) => (
                     <article className={`message ${message.role}`} key={`${activeId}-${index}`}>
-                      {message.role === 'assistant' && <div className="assistant-mark"><Sparkles size={17} /></div>}
+                      {message.role === 'assistant' && (
+                        <div className="assistant-mark"><Sparkles size={17} /></div>
+                      )}
                       <div className="message-body">
                         <b>{message.role === 'assistant' ? 'Veyra' : 'Tu'}</b>
                         <MessageContent content={message.content} />
@@ -532,7 +511,9 @@ function App() {
               {notice && (
                 <div className="notice">
                   <span>{notice}</span>
-                  <button className="icon-button" onClick={() => setNotice('')} aria-label="Chiudi avviso"><X size={16} /></button>
+                  <button className="icon-button" onClick={() => setNotice('')} aria-label="Chiudi avviso">
+                    <X size={16} />
+                  </button>
                 </div>
               )}
 
@@ -555,6 +536,7 @@ function App() {
                   <button type="button" className="plus-button" onClick={() => setShowTools(v => !v)} aria-label="Apri strumenti">
                     <Plus size={22} />
                   </button>
+
                   {showTools && (
                     <div className="tools-menu">
                       <h3>Strumenti</h3>
@@ -588,6 +570,7 @@ function App() {
                   }}
                   placeholder="Scrivi un messaggio a Veyra..."
                 />
+
                 <button className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
                   {busy ? <LoaderCircle className="spin" size={20} /> : <ArrowUp size={21} />}
                 </button>
@@ -610,11 +593,11 @@ function App() {
             <p>Le risposte testuali usano Groq tramite il backend del progetto.</p>
             <div className="info-box">
               <b>Configurazione server</b>
-              <p>La variabile GROQ_API_KEY deve restare nelle variabili d'ambiente di Vercel. Non inserirla nel frontend.</p>
+              <p>La variabile GROQ_API_KEY deve restare nelle variabili d’ambiente di Vercel. Non inserirla nel frontend.</p>
             </div>
             <div className="info-box">
               <b>Strumenti</b>
-              <p>La ricerca web, la generazione di immagini e l'analisi delle immagini richiedono integrazioni server aggiuntive.</p>
+              <p>La ricerca web, la generazione di immagini e l’analisi delle immagini richiedono integrazioni server aggiuntive.</p>
             </div>
             <button className="primary-button" onClick={() => setShowSettings(false)}>Ho capito</button>
           </div>
