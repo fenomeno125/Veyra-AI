@@ -17,69 +17,62 @@ export default async function handler(req, res) {
     const { messages, images = [] } = req.body ?? {};
 
     if (!Array.isArray(messages) || !Array.isArray(images)) {
-      return res.status(400).json({ error: "Richiesta non valida." });
+      return res.status(400).json({ error: "Richiesta non valida" });
     }
 
     if (images.length > 3) {
       return res.status(400).json({
-        error: "Puoi inviare al massimo 3 immagini per richiesta."
+        error: "Puoi allegare massimo 3 immagini per richiesta"
       });
     }
 
     const lastUserIndex = messages
-      .map(message => message?.role)
+      .map(m => m?.role)
       .lastIndexOf("user");
 
     if (lastUserIndex < 0) {
-      return res.status(400).json({
-        error: "Scrivi un messaggio prima di inviare."
-      });
+      return res.status(400).json({ error: "Scrivi un messaggio" });
     }
 
-    const lastUserMessage = messages[lastUserIndex];
+    const lastUser = messages[lastUserIndex];
 
-    if (typeof lastUserMessage.content !== "string") {
-      return res.status(400).json({
-        error: "Il testo del messaggio non è valido."
-      });
+    if (typeof lastUser.content !== "string") {
+      return res.status(400).json({ error: "Messaggio non valido" });
     }
 
     const conversation = messages
       .slice(0, lastUserIndex)
-      .filter(message =>
-        message &&
-        ["user", "assistant"].includes(message.role) &&
-        typeof message.content === "string"
+      .filter(m =>
+        m &&
+        ["user", "assistant"].includes(m.role) &&
+        typeof m.content === "string"
       )
       .slice(-10)
-      .map(message => ({
-        role: message.role,
-        content: message.content
-      }));
+      .map(m => ({ role: m.role, content: m.content }));
 
     const content = [{
       type: "text",
       text: [
-        "Sei Veyra, un assistente utile, preciso e diretto.",
-        "Rispondi alla domanda specifica dell'utente.",
-        "Se ricevi immagini, analizza ciò che è realmente visibile.",
-        "Non inventare testi, numeri o dettagli non leggibili.",
-        "Se ricevi esercizi, leggili e spiegali passo dopo passo.",
-        "Se qualcosa non è chiaro, dichiaralo.",
+        "Sei Veyra, un assistente preciso e utile.",
+        "Rispondi direttamente alla domanda dell'utente.",
+        "Analizza tutte le immagini allegate.",
+        "Non inventare dettagli che non sono visibili.",
+        "Se il testo è illeggibile, dillo chiaramente.",
+        "Se sono presenti esercizi, leggili e spiegali passo dopo passo.",
+        "Se l'utente chiede esempi, forniscili.",
         "",
-        "Richiesta:",
-        lastUserMessage.content ||
+        "Richiesta: " + (
+          lastUser.content ||
           (images.length
             ? "Analizza le immagini allegate."
             : "Come posso aiutarti?")
+        )
       ].join("\n")
     }];
 
     for (const image of images) {
       if (typeof image !== "string") {
-        return res.status(400).json({
-          error: "Formato immagine non valido."
-        });
+        return res.status(400).json({ error: "Immagine non valida" });
       }
 
       const match = image.match(
@@ -88,16 +81,16 @@ export default async function handler(req, res) {
 
       if (!match) {
         return res.status(400).json({
-          error: "Formato non supportato. Usa PNG, JPG o WebP."
+          error: "Formato supportato: PNG, JPG o WebP"
         });
       }
 
       const base64 = match[2].replace(/\s/g, "");
-      const sizeInBytes = Math.floor(base64.length * 3 / 4);
+      const bytes = Math.floor(base64.length * 3 / 4);
 
-      if (sizeInBytes > 5 * 1024 * 1024) {
+      if (bytes > 5 * 1024 * 1024) {
         return res.status(413).json({
-          error: "Ogni immagine deve essere inferiore a 5 MB."
+          error: "Ogni immagine deve essere inferiore a 5 MB"
         });
       }
 
@@ -107,10 +100,7 @@ export default async function handler(req, res) {
       });
     }
 
-    conversation.push({
-      role: "user",
-      content
-    });
+    conversation.push({ role: "user", content });
 
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -133,11 +123,8 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       console.error("Errore Groq:", data);
-
       return res.status(response.status).json({
-        error:
-          data?.error?.message ||
-          "Errore durante l'elaborazione della richiesta."
+        error: data?.error?.message || "Errore durante la richiesta a Groq"
       });
     }
 
@@ -145,16 +132,15 @@ export default async function handler(req, res) {
 
     if (typeof reply !== "string" || !reply.trim()) {
       return res.status(502).json({
-        error: "Il modello non ha restituito una risposta valida."
+        error: "Il modello non ha restituito una risposta"
       });
     }
 
     return res.status(200).json({ reply: reply.trim() });
   } catch (error) {
     console.error("Errore API Veyra:", error);
-
     return res.status(500).json({
-      error: "Errore interno del server."
+      error: "Errore interno del server"
     });
   }
 }
