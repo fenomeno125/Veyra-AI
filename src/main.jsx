@@ -5,18 +5,20 @@ import {
   Sparkles, Plus, Settings2, ArrowUp, X, ImagePlus, Images,
   FileText, Globe, Code2, GraduationCap, Search, Paperclip,
   LoaderCircle, PanelLeftClose, PanelLeft, Compass, FolderKanban,
-  Images as ImagesIcon, CalendarClock, Library, Blocks, Terminal,
-  MoreHorizontal, Pencil, Trash2, MessageSquare
+  CalendarClock, Library, Blocks, Terminal, MoreHorizontal,
+  Pencil, Trash2, MessageSquare
 } from 'lucide-react';
 import './style.css';
 
 const STORAGE_KEY = 'veyra-conversations-v1';
+const MAX_FILES = 5;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 const tools = [
-  { id: 'image', label: 'Crea un’immagine', desc: 'Prepara una descrizione', icon: ImagePlus },
-  { id: 'vision', label: 'Analizza un’immagine', desc: 'Seleziona un’immagine', icon: Images },
-  { id: 'files', label: 'Allega documenti', desc: 'Immagini, PDF e testi', icon: Paperclip },
-  { id: 'web', label: 'Cerca sul web', desc: 'Cerca informazioni online', icon: Globe },
+  { id: 'image', label: 'Crea un’immagine', desc: 'Descrivi ciò che vuoi creare', icon: ImagePlus },
+  { id: 'vision', label: 'Analizza un’immagine', desc: 'Allega una foto da analizzare', icon: Images },
+  { id: 'files', label: 'Allega file', desc: 'Immagini, PDF e testi', icon: Paperclip },
+  { id: 'web', label: 'Cerca sul web', desc: 'Ricerca online', icon: Globe },
   { id: 'study', label: 'Studia e impara', desc: 'Spiegazioni ed esercizi', icon: GraduationCap },
   { id: 'code', label: 'Aiuto con il codice', desc: 'Scrivi e correggi programmi', icon: Code2 }
 ];
@@ -53,15 +55,17 @@ function MessageContent({ content }) {
         if (index % 2 === 1) {
           const lines = block.split('\n');
           const language = lines[0].trim();
-          const code = language && !language.includes(' ')
-            ? lines.slice(1).join('\n')
-            : block;
+          const hasLanguage = language && !language.includes(' ');
+          const code = hasLanguage ? lines.slice(1).join('\n') : block;
 
           return (
             <pre className="code-block" key={index}>
               <div className="code-header">
-                <span>{language || 'Codice'}</span>
-                <button type="button" onClick={() => navigator.clipboard?.writeText(code)}>
+                <span>{hasLanguage ? language : 'Codice'}</span>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard?.writeText(code)}
+                >
                   Copia
                 </button>
               </div>
@@ -81,16 +85,20 @@ function MessageContent({ content }) {
               }
 
               if (/^[-*]\s/.test(value)) {
-                return <div className="formatted-list" key={i}>
-                  <span>•</span><span>{value.slice(2)}</span>
-                </div>;
+                return (
+                  <div className="formatted-list" key={i}>
+                    <span>•</span><span>{value.slice(2)}</span>
+                  </div>
+                );
               }
 
               if (/^\d+[.)]\s/.test(value)) {
-                return <div className="formatted-list" key={i}>
-                  <span>{value.match(/^\d+/)[0]}.</span>
-                  <span>{value.replace(/^\d+[.)]\s/, '')}</span>
-                </div>;
+                return (
+                  <div className="formatted-list" key={i}>
+                    <span>{value.match(/^\d+/)[0]}.</span>
+                    <span>{value.replace(/^\d+[.)]\s/, '')}</span>
+                  </div>
+                );
               }
 
               return <p key={i}>{value}</p>;
@@ -102,12 +110,21 @@ function MessageContent({ content }) {
   );
 }
 
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error(`Impossibile leggere ${file.name}`));
+    };
+    reader.onerror = () => reject(new Error(`Errore leggendo ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
 function App() {
   const [conversations, setConversations] = useState(readConversations);
-
-  // All'apertura mostra la schermata iniziale, senza eliminare la cronologia.
   const [activeId, setActiveId] = useState(null);
-
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -132,7 +149,7 @@ function App() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
     } catch {
-      setNotice('Memoria piena: elimina alcune conversazioni.');
+      setNotice('Memoria locale piena: elimina alcune conversazioni.');
     }
   }, [conversations]);
 
@@ -141,10 +158,12 @@ function App() {
   }, [msgs, busy]);
 
   function clearAttachments() {
-    attachments.forEach(item => {
-      if (item.url) URL.revokeObjectURL(item.url);
+    setAttachments(old => {
+      old.forEach(item => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+      return [];
     });
-    setAttachments([]);
   }
 
   function startChat() {
@@ -167,8 +186,7 @@ function App() {
   }
 
   function deleteChat(id) {
-    const remaining = conversations.filter(c => c.id !== id);
-    setConversations(remaining);
+    setConversations(old => old.filter(c => c.id !== id));
     if (activeId === id) setActiveId(null);
     setMenuId(null);
   }
@@ -176,35 +194,58 @@ function App() {
   function renameChat(id) {
     const current = conversations.find(c => c.id === id);
     const name = window.prompt('Nuovo nome della conversazione:', current?.title || '');
+
     if (name?.trim()) {
       setConversations(old => old.map(c =>
         c.id === id ? { ...c, title: name.trim() } : c
       ));
     }
+
     setMenuId(null);
   }
 
   function addFiles(fileList) {
     const selected = Array.from(fileList || []);
-    const allowed = selected.filter(file =>
-      file.type.startsWith('image/') ||
-      file.type === 'application/pdf' ||
-      file.type.startsWith('text/')
-    );
+    const remaining = Math.max(0, MAX_FILES - attachments.length);
+    const accepted = [];
+    const rejected = [];
 
-    const remaining = Math.max(0, 5 - attachments.length);
-    const accepted = allowed.slice(0, remaining).map(file => ({
-      id: crypto.randomUUID(),
-      file,
-      url: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
-    }));
+    for (const file of selected) {
+      const isImage = file.type.startsWith('image/');
+      const isText = file.type.startsWith('text/') ||
+        ['application/pdf'].includes(file.type);
 
-    setAttachments(old => [...old, ...accepted]);
+      if (!isImage && !isText) {
+        rejected.push(`${file.name}: formato non supportato`);
+        continue;
+      }
 
-    if (selected.length !== allowed.length || allowed.length > remaining) {
-      setNotice('Puoi allegare fino a 5 file: immagini, PDF e testi.');
-    } else if (accepted.length) {
-      setNotice('Allegati in anteprima. Il backend attuale invia solo testo.');
+      if (isImage && file.size > MAX_IMAGE_SIZE) {
+        rejected.push(`${file.name}: supera 5 MB`);
+        continue;
+      }
+
+      if (accepted.length >= remaining) {
+        rejected.push(`${file.name}: massimo ${MAX_FILES} allegati`);
+        continue;
+      }
+
+      accepted.push({
+        id: crypto.randomUUID(),
+        file,
+        url: isImage ? URL.createObjectURL(file) : null
+      });
+    }
+
+    if (accepted.length) {
+      setAttachments(old => [...old, ...accepted]);
+      setNotice(
+        'Allegati aggiunti. Le immagini saranno inviate al modello.'
+      );
+    }
+
+    if (rejected.length) {
+      setNotice(rejected.join('. '));
     }
 
     if (fileRef.current) fileRef.current.value = '';
@@ -221,11 +262,16 @@ function App() {
 
   async function send(value = text) {
     const prompt = value.trim();
-    if ((!prompt && !attachments.length) || busy) return;
+    const selected = [...attachments];
 
-    if (attachments.length) {
-      setNotice('Gli allegati sono in anteprima, ma non vengono ancora inviati al modello.');
-      if (!prompt) return;
+    if ((!prompt && !selected.length) || busy) return;
+
+    const images = selected.filter(item => item.file.type.startsWith('image/'));
+    const unsupported = selected.filter(item => !item.file.type.startsWith('image/'));
+
+    if (unsupported.length) {
+      setNotice('Per ora il backend supporta immagini. Rimuovi PDF e altri documenti prima di inviare.');
+      return;
     }
 
     let chatId = activeId;
@@ -239,27 +285,38 @@ function App() {
       setActiveId(chatId);
     }
 
+    const userContent = prompt ||
+      'Descrivi e analizza le immagini che ho allegato.';
+
     const next = [
       ...(current?.messages || []),
-      { role: 'user', content: prompt }
+      { role: 'user', content: userContent }
     ];
 
-    setConversations(old => old.map(c => c.id === chatId
-      ? { ...c, messages: next, title: getTitle(next), updatedAt: Date.now() }
-      : c
+    setConversations(old => old.map(c =>
+      c.id === chatId
+        ? { ...c, messages: next, title: getTitle(next), updatedAt: Date.now() }
+        : c
     ));
 
     setText('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setBusy(true);
     setShowTools(false);
-    clearAttachments();
+    setNotice('');
 
     try {
+      const imageData = await Promise.all(
+        images.map(item => fileToDataURL(item.file))
+      );
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next.slice(-30) })
+        body: JSON.stringify({
+          messages: next.slice(-30),
+          images: imageData
+        })
       });
 
       const raw = await response.text();
@@ -268,7 +325,7 @@ function App() {
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error('Risposta server non valida. Controlla il backend su Vercel.');
+        throw new Error('Risposta server non valida. Controlla api/chat.js.');
       }
 
       if (!response.ok) {
@@ -276,24 +333,32 @@ function App() {
       }
 
       const reply = data.reply || 'Non ho ricevuto una risposta.';
-      setConversations(old => old.map(c => {
-        if (c.id !== chatId) return c;
-        return {
-          ...c,
-          messages: [...c.messages, { role: 'assistant', content: reply }],
-          updatedAt: Date.now()
-        };
-      }));
+
+      setConversations(old => old.map(c =>
+        c.id === chatId
+          ? {
+              ...c,
+              messages: [...c.messages, { role: 'assistant', content: reply }],
+              updatedAt: Date.now()
+            }
+          : c
+      ));
+
+      clearAttachments();
     } catch (error) {
-      setConversations(old => old.map(c => c.id === chatId
-        ? {
-            ...c,
-            messages: [...c.messages, {
-              role: 'assistant',
-              content: 'Non riesco a rispondere: ' + error.message
-            }]
-          }
-        : c
+      setConversations(old => old.map(c =>
+        c.id === chatId
+          ? {
+              ...c,
+              messages: [
+                ...c.messages,
+                {
+                  role: 'assistant',
+                  content: 'Non riesco a rispondere: ' + error.message
+                }
+              ]
+            }
+          : c
       ));
     } finally {
       setBusy(false);
@@ -323,7 +388,7 @@ function App() {
 
     if (id === 'image' || id === 'web') {
       setNotice(id === 'image'
-        ? 'La generazione di immagini richiede un servizio dedicato.'
+        ? 'Per generare immagini serve collegare un servizio di generazione.'
         : 'La ricerca web non è ancora collegata al backend.');
     }
 
@@ -346,11 +411,11 @@ function App() {
     setSection(label === 'Recenti' ? 'Chat' : label);
     setNotice(
       label === 'Immagini'
-        ? 'Gli strumenti per immagini sono ancora in preparazione.'
+        ? 'Puoi allegare immagini alla chat per farle analizzare.'
         : label === 'Programmate'
         ? 'Le attività programmate non sono ancora disponibili.'
         : label === 'Plugin'
-        ? 'I plugin saranno disponibili quando saranno collegati a servizi reali.'
+        ? 'I plugin non sono ancora collegati a servizi reali.'
         : label === 'Codex'
         ? 'L’area Codex è in preparazione.'
         : ''
@@ -420,7 +485,7 @@ function App() {
           </div>
 
           <div className="sidebar-links">
-            <button className="side-action" onClick={() => selectSection('Immagini')}><ImagesIcon size={18} /> Immagini</button>
+            <button className="side-action" onClick={() => selectSection('Immagini')}><Images size={18} /> Immagini</button>
             <button className="side-action" onClick={() => selectSection('Programmate')}><CalendarClock size={18} /> Programmate</button>
             <button className="side-action" onClick={() => selectSection('Libreria')}><Library size={18} /> Libreria</button>
             <button className="side-action" onClick={() => selectSection('Plugin')}><Blocks size={18} /> Plugin</button>
@@ -521,7 +586,9 @@ function App() {
                 <div className="attachments">
                   {attachments.map(item => (
                     <div className="attachment" key={item.id}>
-                      {item.url ? <img src={item.url} alt={item.file.name} /> : <FileText size={23} />}
+                      {item.url
+                        ? <img src={item.url} alt={item.file.name} />
+                        : <FileText size={23} />}
                       <span title={item.file.name}>{item.file.name}</span>
                       <button className="remove-file" onClick={() => removeAttachment(item.id)} aria-label={`Rimuovi ${item.file.name}`}>
                         <X size={15} />
@@ -577,7 +644,7 @@ function App() {
               </form>
 
               <input ref={fileRef} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.csv" onChange={e => addFiles(e.target.files)} />
-              <input ref={imageRef} type="file" hidden accept="image/*" onChange={e => addFiles(e.target.files)} />
+              <input ref={imageRef} type="file" hidden multiple accept="image/*" onChange={e => addFiles(e.target.files)} />
               <footer>Veyra può commettere errori. Verifica le informazioni importanti.</footer>
             </div>
           </>
@@ -590,14 +657,14 @@ function App() {
             <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi"><X size={19} /></button>
             <div className="modal-icon"><Settings2 size={23} /></div>
             <h2>Impostazioni Veyra</h2>
-            <p>Le risposte testuali usano Groq tramite il backend del progetto.</p>
+            <p>Le risposte testuali e l'analisi delle immagini usano Groq tramite il backend.</p>
             <div className="info-box">
               <b>Configurazione server</b>
-              <p>La variabile GROQ_API_KEY deve restare nelle variabili d’ambiente di Vercel. Non inserirla nel frontend.</p>
+              <p>La variabile GROQ_API_KEY deve restare nelle variabili d'ambiente di Vercel. Non inserirla nel frontend.</p>
             </div>
             <div className="info-box">
-              <b>Strumenti</b>
-              <p>La ricerca web, la generazione di immagini e l’analisi delle immagini richiedono integrazioni server aggiuntive.</p>
+              <b>Allegati</b>
+              <p>Le immagini vengono inviate al backend. Per leggerle, api/chat.js deve usare un modello Groq compatibile con le immagini.</p>
             </div>
             <button className="primary-button" onClick={() => setShowSettings(false)}>Ho capito</button>
           </div>
