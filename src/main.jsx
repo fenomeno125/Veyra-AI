@@ -78,6 +78,7 @@ function MessageContent({ content }) {
           <div className="text-block" key={index}>
             {block.split('\n').map((line, i) => {
               const value = line.trim();
+
               if (!value) return <div className="line-space" key={i} />;
 
               if (/^#{1,3}\s/.test(value)) {
@@ -87,7 +88,8 @@ function MessageContent({ content }) {
               if (/^[-*]\s/.test(value)) {
                 return (
                   <div className="formatted-list" key={i}>
-                    <span>•</span><span>{value.slice(2)}</span>
+                    <span>•</span>
+                    <span>{value.slice(2)}</span>
                   </div>
                 );
               }
@@ -110,13 +112,41 @@ function MessageContent({ content }) {
   );
 }
 
+/* Mostra le immagini allegate direttamente nel messaggio inviato. */
+function MessageImages({ images = [] }) {
+  if (!images.length) return null;
+
+  return (
+    <div className="sent-images">
+      {images.map((src, index) => (
+        <a
+          className="sent-image-link"
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          key={`${index}-${src.slice(0, 40)}`}
+          aria-label={`Apri immagine ${index + 1}`}
+        >
+          <img
+            src={src}
+            alt={`Immagine allegata ${index + 1}`}
+            loading="lazy"
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+
     reader.onload = () => {
       if (typeof reader.result === 'string') resolve(reader.result);
       else reject(new Error(`Impossibile leggere ${file.name}`));
     };
+
     reader.onerror = () => reject(new Error(`Errore leggendo ${file.name}`));
     reader.readAsDataURL(file);
   });
@@ -183,6 +213,8 @@ function App() {
     setSection('Chat');
     setNotice('');
     setMenuId(null);
+    clearAttachments();
+    setText('');
   }
 
   function deleteChat(id) {
@@ -193,7 +225,10 @@ function App() {
 
   function renameChat(id) {
     const current = conversations.find(c => c.id === id);
-    const name = window.prompt('Nuovo nome della conversazione:', current?.title || '');
+    const name = window.prompt(
+      'Nuovo nome della conversazione:',
+      current?.title || ''
+    );
 
     if (name?.trim()) {
       setConversations(old => old.map(c =>
@@ -239,14 +274,10 @@ function App() {
 
     if (accepted.length) {
       setAttachments(old => [...old, ...accepted]);
-      setNotice(
-        'Allegati aggiunti. Le immagini saranno inviate al modello.'
-      );
+      setNotice('Allegati aggiunti. Le immagini saranno mostrate nel messaggio.');
     }
 
-    if (rejected.length) {
-      setNotice(rejected.join('. '));
-    }
+    if (rejected.length) setNotice(rejected.join('. '));
 
     if (fileRef.current) fileRef.current.value = '';
     if (imageRef.current) imageRef.current.value = '';
@@ -266,11 +297,18 @@ function App() {
 
     if ((!prompt && !selected.length) || busy) return;
 
-    const images = selected.filter(item => item.file.type.startsWith('image/'));
-    const unsupported = selected.filter(item => !item.file.type.startsWith('image/'));
+    const images = selected.filter(item =>
+      item.file.type.startsWith('image/')
+    );
+
+    const unsupported = selected.filter(item =>
+      !item.file.type.startsWith('image/')
+    );
 
     if (unsupported.length) {
-      setNotice('Per ora il backend supporta immagini. Rimuovi PDF e altri documenti prima di inviare.');
+      setNotice(
+        'Per ora il backend supporta immagini. Rimuovi PDF e altri documenti prima di inviare.'
+      );
       return;
     }
 
@@ -288,33 +326,62 @@ function App() {
     const userContent = prompt ||
       'Descrivi e analizza le immagini che ho allegato.';
 
-    const next = [
-      ...(current?.messages || []),
-      { role: 'user', content: userContent }
-    ];
-
-    setConversations(old => old.map(c =>
-      c.id === chatId
-        ? { ...c, messages: next, title: getTitle(next), updatedAt: Date.now() }
-        : c
-    ));
-
-    setText('');
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    /* Convertiamo le immagini in dati persistenti per la cronologia. */
     setBusy(true);
     setShowTools(false);
     setNotice('');
+    setText('');
+
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     try {
       const imageData = await Promise.all(
         images.map(item => fileToDataURL(item.file))
       );
 
+      const userMessage = {
+        role: 'user',
+        content: userContent,
+        images: imageData
+      };
+
+      const next = [...(current?.messages || []), userMessage];
+
+      setConversations(old => {
+        const exists = old.some(c => c.id === chatId);
+
+        if (!exists) {
+          return [{
+            ...current,
+            messages: next,
+            title: getTitle(next),
+            updatedAt: Date.now()
+          }, ...old];
+        }
+
+        return old.map(c =>
+          c.id === chatId
+            ? {
+                ...c,
+                messages: next,
+                title: getTitle(next),
+                updatedAt: Date.now()
+              }
+            : c
+        );
+      });
+
+      /* Liberiamo le anteprime solo dopo aver salvato i dati immagine. */
+      clearAttachments();
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: next.slice(-30),
+          messages: next.slice(-30).map(message => ({
+            role: message.role,
+            content: message.content
+          })),
           images: imageData
         })
       });
@@ -338,28 +405,16 @@ function App() {
         c.id === chatId
           ? {
               ...c,
-              messages: [...c.messages, { role: 'assistant', content: reply }],
+              messages: [...c.messages, {
+                role: 'assistant',
+                content: reply
+              }],
               updatedAt: Date.now()
             }
           : c
       ));
-
-      clearAttachments();
     } catch (error) {
-      setConversations(old => old.map(c =>
-        c.id === chatId
-          ? {
-              ...c,
-              messages: [
-                ...c.messages,
-                {
-                  role: 'assistant',
-                  content: 'Non riesco a rispondere: ' + error.message
-                }
-              ]
-            }
-          : c
-      ));
+      setNotice('Errore: ' + error.message);
     } finally {
       setBusy(false);
       textareaRef.current?.focus();
@@ -562,6 +617,11 @@ function App() {
                       )}
                       <div className="message-body">
                         <b>{message.role === 'assistant' ? 'Veyra' : 'Tu'}</b>
+
+                        {message.role === 'user' && (
+                          <MessageImages images={message.images || []} />
+                        )}
+
                         <MessageContent content={message.content} />
                       </div>
                     </article>
@@ -590,7 +650,7 @@ function App() {
                         ? <img src={item.url} alt={item.file.name} />
                         : <FileText size={23} />}
                       <span title={item.file.name}>{item.file.name}</span>
-                      <button className="remove-file" onClick={() => removeAttachment(item.id)} aria-label={`Rimuovi ${item.file.name}`}>
+                      <button type="button" className="remove-file" onClick={() => removeAttachment(item.id)} aria-label={`Rimuovi ${item.file.name}`}>
                         <X size={15} />
                       </button>
                     </div>
@@ -638,7 +698,7 @@ function App() {
                   placeholder="Scrivi un messaggio a Veyra..."
                 />
 
-                <button className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
+                <button type="submit" className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
                   {busy ? <LoaderCircle className="spin" size={20} /> : <ArrowUp size={21} />}
                 </button>
               </form>
