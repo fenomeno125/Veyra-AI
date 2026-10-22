@@ -2,9 +2,7 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).json({
-      error: "Metodo non consentito"
-    });
+    return res.status(405).json({ error: "Metodo non consentito" });
   }
 
   const apiKey = process.env.GROQ_API_KEY;
@@ -18,27 +16,33 @@ export default async function handler(req, res) {
   try {
     const { messages, images = [] } = req.body ?? {};
 
-    if (
-      !Array.isArray(messages) ||
-      !Array.isArray(images) ||
-      images.length > 3
-    ) {
+    if (!Array.isArray(messages) || !Array.isArray(images)) {
+      return res.status(400).json({ error: "Richiesta non valida." });
+    }
+
+    if (images.length > 3) {
       return res.status(400).json({
-        error: "Messaggi o immagini non validi. Massimo 3 immagini."
+        error: "Puoi inviare al massimo 3 immagini per richiesta."
       });
     }
 
-    const lastUserIndex = messages.findLastIndex
-      ? messages.findLastIndex(message => message?.role === "user")
-      : messages.map(message => message?.role).lastIndexOf("user");
+    const lastUserIndex = messages
+      .map(message => message?.role)
+      .lastIndexOf("user");
 
     if (lastUserIndex < 0) {
       return res.status(400).json({
-        error: "Scrivi un messaggio prima di inviare"
+        error: "Scrivi un messaggio prima di inviare."
       });
     }
 
     const lastUserMessage = messages[lastUserIndex];
+
+    if (typeof lastUserMessage.content !== "string") {
+      return res.status(400).json({
+        error: "Il testo del messaggio non è valido."
+      });
+    }
 
     const conversation = messages
       .slice(0, lastUserIndex)
@@ -47,26 +51,34 @@ export default async function handler(req, res) {
         ["user", "assistant"].includes(message.role) &&
         typeof message.content === "string"
       )
-      .slice(-28)
+      .slice(-10)
       .map(message => ({
         role: message.role,
         content: message.content
       }));
 
-    const content = [
-      {
-        type: "text",
-        text: String(
-          lastUserMessage.content ||
-          (images.length ? "Descrivi e analizza le immagini allegate." : "")
-        )
-      }
-    ];
+    const content = [{
+      type: "text",
+      text: [
+        "Sei Veyra, un assistente utile, preciso e diretto.",
+        "Rispondi alla domanda specifica dell'utente.",
+        "Se ricevi immagini, analizza ciò che è realmente visibile.",
+        "Non inventare testi, numeri o dettagli non leggibili.",
+        "Se ricevi esercizi, leggili e spiegali passo dopo passo.",
+        "Se qualcosa non è chiaro, dichiaralo.",
+        "",
+        "Richiesta:",
+        lastUserMessage.content ||
+          (images.length
+            ? "Analizza le immagini allegate."
+            : "Come posso aiutarti?")
+      ].join("\n")
+    }];
 
     for (const image of images) {
       if (typeof image !== "string") {
         return res.status(400).json({
-          error: "Formato immagine non valido"
+          error: "Formato immagine non valido."
         });
       }
 
@@ -76,7 +88,7 @@ export default async function handler(req, res) {
 
       if (!match) {
         return res.status(400).json({
-          error: "Formato immagine non supportato. Usa PNG, JPG o WebP."
+          error: "Formato non supportato. Usa PNG, JPG o WebP."
         });
       }
 
@@ -85,15 +97,13 @@ export default async function handler(req, res) {
 
       if (sizeInBytes > 5 * 1024 * 1024) {
         return res.status(413).json({
-          error: "Un'immagine supera il limite di 5 MB."
+          error: "Ogni immagine deve essere inferiore a 5 MB."
         });
       }
 
       content.push({
         type: "image_url",
-        image_url: {
-          url: image
-        }
+        image_url: { url: image }
       });
     }
 
@@ -113,8 +123,8 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: "qwen/qwen3.8-27b",
           messages: conversation,
-          temperature: 0.7,
-          max_tokens: 2048
+          temperature: 0.3,
+          max_tokens: 1200
         })
       }
     );
@@ -125,8 +135,9 @@ export default async function handler(req, res) {
       console.error("Errore Groq:", data);
 
       return res.status(response.status).json({
-        error: data?.error?.message ||
-          "Groq non è riuscito a elaborare la richiesta."
+        error:
+          data?.error?.message ||
+          "Errore durante l'elaborazione della richiesta."
       });
     }
 
@@ -134,16 +145,16 @@ export default async function handler(req, res) {
 
     if (typeof reply !== "string" || !reply.trim()) {
       return res.status(502).json({
-        error: "Il modello non ha restituito una risposta."
+        error: "Il modello non ha restituito una risposta valida."
       });
     }
 
-    return res.status(200).json({ reply });
+    return res.status(200).json({ reply: reply.trim() });
   } catch (error) {
     console.error("Errore API Veyra:", error);
 
     return res.status(500).json({
-      error: "Errore interno del server durante la richiesta."
+      error: "Errore interno del server."
     });
   }
 }
