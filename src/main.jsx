@@ -23,9 +23,14 @@ const tools = [
   { id: 'code', label: 'Aiuto con il codice', desc: 'Scrivi e correggi programmi', icon: Code2 }
 ];
 
+function createId() {
+  return globalThis.crypto?.randomUUID?.() ||
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function newConversation() {
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     title: 'Nuova chat',
     messages: [],
     updatedAt: Date.now()
@@ -64,7 +69,9 @@ function MessageContent({ content }) {
                 <span>{hasLanguage ? language : 'Codice'}</span>
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard?.writeText(code)}
+                  onClick={() => {
+                    navigator.clipboard?.writeText(code).catch(() => {});
+                  }}
                 >
                   Copia
                 </button>
@@ -112,28 +119,33 @@ function MessageContent({ content }) {
   );
 }
 
-/* Mostra le immagini allegate direttamente nel messaggio inviato. */
 function MessageImages({ images = [] }) {
   if (!images.length) return null;
 
   return (
     <div className="sent-images">
-      {images.map((src, index) => (
-        <a
-          className="sent-image-link"
-          href={src}
-          target="_blank"
-          rel="noreferrer"
-          key={`${index}-${src.slice(0, 40)}`}
-          aria-label={`Apri immagine ${index + 1}`}
-        >
-          <img
-            src={src}
-            alt={`Immagine allegata ${index + 1}`}
-            loading="lazy"
-          />
-        </a>
-      ))}
+      {images.map((src, index) => {
+        if (typeof src !== 'string' || !src.startsWith('data:image/')) {
+          return null;
+        }
+
+        return (
+          <a
+            className="sent-image-link"
+            href={src}
+            target="_blank"
+            rel="noreferrer"
+            key={`${index}-${src.slice(0, 40)}`}
+            aria-label={`Apri immagine ${index + 1}`}
+            title="Apri immagine"
+          >
+            <img
+              src={src}
+              alt={`Immagine allegata ${index + 1}`}
+            />
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -178,14 +190,25 @@ function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
-    } catch {
-      setNotice('Memoria locale piena: elimina alcune conversazioni.');
+    } catch (error) {
+      console.warn('Impossibile salvare la cronologia locale:', error);
+      setNotice(
+        'Spazio del browser esaurito: alcune immagini potrebbero non restare salvate dopo il riavvio.'
+      );
     }
   }, [conversations]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [msgs, busy]);
+
+  useEffect(() => {
+    return () => {
+      attachments.forEach(item => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+    };
+  }, []);
 
   function clearAttachments() {
     setAttachments(old => {
@@ -266,7 +289,7 @@ function App() {
       }
 
       accepted.push({
-        id: crypto.randomUUID(),
+        id: createId(),
         file,
         url: isImage ? URL.createObjectURL(file) : null
       });
@@ -315,7 +338,7 @@ function App() {
     let chatId = activeId;
     let current = conversations.find(c => c.id === chatId);
 
-    if (!chatId) {
+    if (!chatId || !current) {
       const chat = newConversation();
       chatId = chat.id;
       current = chat;
@@ -326,7 +349,6 @@ function App() {
     const userContent = prompt ||
       'Descrivi e analizza le immagini che ho allegato.';
 
-    /* Convertiamo le immagini in dati persistenti per la cronologia. */
     setBusy(true);
     setShowTools(false);
     setNotice('');
@@ -364,14 +386,13 @@ function App() {
             ? {
                 ...c,
                 messages: next,
-                title: getTitle(next),
+                title: c.title === 'Nuova chat' ? getTitle(next) : c.title,
                 updatedAt: Date.now()
               }
             : c
         );
       });
 
-      /* Liberiamo le anteprime solo dopo aver salvato i dati immagine. */
       clearAttachments();
 
       const response = await fetch('/api/chat', {
@@ -414,7 +435,7 @@ function App() {
           : c
       ));
     } catch (error) {
-      setNotice('Errore: ' + error.message);
+      setNotice('Errore: ' + (error?.message || 'Richiesta non riuscita.'));
     } finally {
       setBusy(false);
       textareaRef.current?.focus();
@@ -634,7 +655,7 @@ function App() {
 
             <div className="composer-area">
               {notice && (
-                <div className="notice">
+                <div className="notice" role="status">
                   <span>{notice}</span>
                   <button className="icon-button" onClick={() => setNotice('')} aria-label="Chiudi avviso">
                     <X size={16} />
