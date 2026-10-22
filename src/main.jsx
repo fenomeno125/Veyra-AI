@@ -6,19 +6,21 @@ import {
   FileText, Globe, Code2, GraduationCap, Search, Paperclip,
   LoaderCircle, PanelLeftClose, PanelLeft, Compass, FolderKanban,
   CalendarClock, Library, Blocks, Terminal, MoreHorizontal,
-  Pencil, Trash2, MessageSquare
+  Pencil, Trash2, MessageSquare, ExternalLink, Download,
+  RefreshCw, Copy, Check
 } from 'lucide-react';
 import './style.css';
 
 const STORAGE_KEY = 'veyra-conversations-v1';
 const MAX_FILES = 5;
+const MAX_IMAGES_PER_REQUEST = 3;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 const tools = [
-  { id: 'image', label: 'Crea un’immagine', desc: 'Descrivi ciò che vuoi creare', icon: ImagePlus },
+  { id: 'image', label: 'Crea un’immagine', desc: 'Genera un’immagine dalla descrizione', icon: ImagePlus },
   { id: 'vision', label: 'Analizza un’immagine', desc: 'Allega una foto da analizzare', icon: Images },
   { id: 'files', label: 'Allega file', desc: 'Immagini, PDF e testi', icon: Paperclip },
-  { id: 'web', label: 'Cerca sul web', desc: 'Ricerca online', icon: Globe },
+  { id: 'web', label: 'Cerca sul web', desc: 'Cerca informazioni online', icon: Globe },
   { id: 'study', label: 'Studia e impara', desc: 'Spiegazioni ed esercizi', icon: GraduationCap },
   { id: 'code', label: 'Aiuto con il codice', desc: 'Scrivi e correggi programmi', icon: Code2 }
 ];
@@ -51,6 +53,38 @@ function getTitle(messages) {
   return first.length > 38 ? first.slice(0, 38) + '…' : first || 'Nuova chat';
 }
 
+async function postJSON(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const raw = await response.text();
+  let data;
+
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      'Risposta del server non valida. Controlla che il backend sia configurato.'
+    );
+  }
+
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error(
+        data.error ||
+        'Hai raggiunto temporaneamente il limite di richieste. Attendi qualche secondo e riprova.'
+      );
+    }
+
+    throw new Error(data.error || `Errore del server (${response.status}).`);
+  }
+
+  return data;
+}
+
 function MessageContent({ content }) {
   const blocks = String(content || '').split(/```/);
 
@@ -73,7 +107,7 @@ function MessageContent({ content }) {
                     navigator.clipboard?.writeText(code).catch(() => {});
                   }}
                 >
-                  Copia
+                  <Copy size={13} /> Copia
                 </button>
               </div>
               <code>{code}</code>
@@ -119,31 +153,85 @@ function MessageContent({ content }) {
   );
 }
 
-function MessageImages({ images = [] }) {
-  if (!images.length) return null;
+function MessageImages({ images = [], onEdit }) {
+  const validImages = images.filter(
+    src => typeof src === 'string' &&
+      (src.startsWith('data:image/') || /^https?:\/\//i.test(src))
+  );
+
+  if (!validImages.length) return null;
 
   return (
     <div className="sent-images">
-      {images.map((src, index) => {
-        if (typeof src !== 'string' || !src.startsWith('data:image/')) {
-          return null;
-        }
-
-        return (
+      {validImages.map((src, index) => (
+        <div className="generated-image-card" key={`${index}-${src.slice(0, 40)}`}>
           <a
             className="sent-image-link"
             href={src}
             target="_blank"
             rel="noreferrer"
-            key={`${index}-${src.slice(0, 40)}`}
             aria-label={`Apri immagine ${index + 1}`}
             title="Apri immagine"
           >
-            <img
-              src={src}
-              alt={`Immagine allegata ${index + 1}`}
-            />
+            <img src={src} alt={`Immagine ${index + 1}`} loading="lazy" />
           </a>
+
+          {onEdit && (
+            <button
+              className="image-edit-button"
+              type="button"
+              onClick={() => onEdit(src)}
+              title="Modifica questa immagine"
+            >
+              <Pencil size={14} />
+              Modifica
+            </button>
+          )}
+
+          <a
+            className="image-download-button"
+            href={src}
+            download={`veyra-immagine-${index + 1}.png`}
+            title="Scarica immagine"
+            aria-label="Scarica immagine"
+          >
+            <Download size={15} />
+          </a>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WebResults({ results = [] }) {
+  if (!Array.isArray(results) || !results.length) return null;
+
+  return (
+    <div className="web-results">
+      <div className="web-results-heading">
+        <Globe size={16} />
+        <b>Risultati dal web</b>
+      </div>
+
+      {results.map((result, index) => {
+        const url = typeof result.url === 'string' ? result.url : '';
+
+        return (
+          <article className="web-result" key={`${url}-${index}`}>
+            <a
+              href={url || undefined}
+              target="_blank"
+              rel="noreferrer"
+              className="web-result-title"
+            >
+              {result.title || 'Risultato senza titolo'}
+              <ExternalLink size={13} />
+            </a>
+            {result.domain && (
+              <div className="web-result-domain">{result.domain}</div>
+            )}
+            <p>{result.snippet || result.description || ''}</p>
+          </article>
         );
       })}
     </div>
@@ -178,6 +266,8 @@ function App() {
   const [notice, setNotice] = useState('');
   const [section, setSection] = useState('Chat');
   const [menuId, setMenuId] = useState(null);
+  const [toolMode, setToolMode] = useState('chat');
+  const [editingImage, setEditingImage] = useState(null);
 
   const fileRef = useRef(null);
   const imageRef = useRef(null);
@@ -193,7 +283,7 @@ function App() {
     } catch (error) {
       console.warn('Impossibile salvare la cronologia locale:', error);
       setNotice(
-        'Spazio del browser esaurito: alcune immagini potrebbero non restare salvate dopo il riavvio.'
+        'Spazio del browser esaurito: alcune immagini potrebbero non restare salvate.'
       );
     }
   }, [conversations]);
@@ -224,6 +314,8 @@ function App() {
     setConversations(old => [chat, ...old]);
     setActiveId(chat.id);
     setText('');
+    setToolMode('chat');
+    setEditingImage(null);
     clearAttachments();
     setNotice('');
     setSection('Chat');
@@ -234,6 +326,8 @@ function App() {
   function openChat(id) {
     setActiveId(id);
     setSection('Chat');
+    setToolMode('chat');
+    setEditingImage(null);
     setNotice('');
     setMenuId(null);
     clearAttachments();
@@ -297,7 +391,7 @@ function App() {
 
     if (accepted.length) {
       setAttachments(old => [...old, ...accepted]);
-      setNotice('Allegati aggiunti. Le immagini saranno mostrate nel messaggio.');
+      setNotice('Allegati aggiunti.');
     }
 
     if (rejected.length) setNotice(rejected.join('. '));
@@ -312,6 +406,16 @@ function App() {
       if (item?.url) URL.revokeObjectURL(item.url);
       return old.filter(file => file.id !== id);
     });
+  }
+
+  function editImage(src) {
+    setEditingImage(src);
+    setToolMode('image');
+    setText('Modifica questa immagine: ');
+    setNotice(
+      'Descrivi la modifica che desideri. Il servizio immagini dovrà supportare l’editing per modificare davvero l’immagine.'
+    );
+    textareaRef.current?.focus();
   }
 
   async function send(value = text) {
@@ -330,8 +434,23 @@ function App() {
 
     if (unsupported.length) {
       setNotice(
-        'Per ora il backend supporta immagini. Rimuovi PDF e altri documenti prima di inviare.'
+        'Il backend attuale supporta le immagini, ma non legge ancora PDF e documenti. Rimuovili prima di inviare.'
       );
+      return;
+    }
+
+    if (images.length > MAX_IMAGES_PER_REQUEST) {
+      setNotice(`Puoi inviare al massimo ${MAX_IMAGES_PER_REQUEST} immagini per richiesta.`);
+      return;
+    }
+
+    if (toolMode === 'image' && !prompt) {
+      setNotice('Descrivi l’immagine che vuoi creare.');
+      return;
+    }
+
+    if (toolMode === 'web' && !prompt) {
+      setNotice('Scrivi cosa vuoi cercare sul web.');
       return;
     }
 
@@ -364,7 +483,8 @@ function App() {
       const userMessage = {
         role: 'user',
         content: userContent,
-        images: imageData
+        images: imageData,
+        tool: toolMode
       };
 
       const next = [...(current?.messages || []), userMessage];
@@ -395,41 +515,60 @@ function App() {
 
       clearAttachments();
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: next.slice(-30).map(message => ({
+      let assistantMessage;
+
+      if (toolMode === 'web') {
+        const data = await postJSON('/api/search', {
+          query: userContent
+        });
+
+        assistantMessage = {
+          role: 'assistant',
+          content: data.reply || data.summary || 'Ecco i risultati trovati.',
+          results: Array.isArray(data.results) ? data.results : []
+        };
+      } else if (toolMode === 'image') {
+        const data = await postJSON('/api/image', {
+          prompt: userContent,
+          image: editingImage || undefined
+        });
+
+        const generatedImages = [
+          ...(Array.isArray(data.images) ? data.images : []),
+          ...(typeof data.image === 'string' ? [data.image] : []),
+          ...(typeof data.url === 'string' ? [data.url] : [])
+        ];
+
+        assistantMessage = {
+          role: 'assistant',
+          content: data.reply ||
+            (generatedImages.length
+              ? 'Ecco l’immagine che ho generato.'
+              : 'Il servizio non ha restituito un’immagine.'),
+          images: [...new Set(generatedImages)]
+        };
+
+        setEditingImage(null);
+      } else {
+        const data = await postJSON('/api/chat', {
+          messages: next.slice(-20).map(message => ({
             role: message.role,
             content: message.content
           })),
           images: imageData
-        })
-      });
+        });
 
-      const raw = await response.text();
-      let data;
-
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error('Risposta server non valida. Controlla api/chat.js.');
+        assistantMessage = {
+          role: 'assistant',
+          content: data.reply || 'Non ho ricevuto una risposta.'
+        };
       }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Errore del server.');
-      }
-
-      const reply = data.reply || 'Non ho ricevuto una risposta.';
 
       setConversations(old => old.map(c =>
         c.id === chatId
           ? {
               ...c,
-              messages: [...c.messages, {
-                role: 'assistant',
-                content: reply
-              }],
+              messages: [...c.messages, assistantMessage],
               updatedAt: Date.now()
             }
           : c
@@ -444,6 +583,7 @@ function App() {
 
   function chooseTool(id) {
     setShowTools(false);
+    setToolMode(id === 'web' || id === 'image' ? id : 'chat');
 
     if (id === 'files') {
       fileRef.current?.click();
@@ -452,23 +592,26 @@ function App() {
 
     if (id === 'vision') {
       imageRef.current?.click();
+      setNotice('Seleziona una o più immagini da analizzare.');
       return;
     }
 
     const prompts = {
-      image: 'Vorrei creare un’immagine. Aiutami a preparare una descrizione dettagliata.',
-      web: 'Vorrei cercare informazioni aggiornate sul web.',
+      image: '',
+      web: '',
       study: 'Aiutami a studiare e capire un argomento con esempi semplici.',
       code: 'Aiutami a scrivere o correggere del codice.'
     };
 
-    if (id === 'image' || id === 'web') {
-      setNotice(id === 'image'
-        ? 'Per generare immagini serve collegare un servizio di generazione.'
-        : 'La ricerca web non è ancora collegata al backend.');
-    }
-
     setText(prompts[id] || '');
+    setNotice(
+      id === 'image'
+        ? 'Modalità generazione immagini attiva. Descrivi cosa vuoi creare.'
+        : id === 'web'
+        ? 'Modalità ricerca web attiva. Scrivi la tua ricerca.'
+        : ''
+    );
+
     textareaRef.current?.focus();
   }
 
@@ -487,7 +630,7 @@ function App() {
     setSection(label === 'Recenti' ? 'Chat' : label);
     setNotice(
       label === 'Immagini'
-        ? 'Puoi allegare immagini alla chat per farle analizzare.'
+        ? 'Puoi creare immagini dagli strumenti oppure allegare una foto da analizzare.'
         : label === 'Programmate'
         ? 'Le attività programmate non sono ancora disponibili.'
         : label === 'Plugin'
@@ -592,7 +735,9 @@ function App() {
           <div className="topbar-title">
             <span className="status-dot" />
             <b>Veyra</b>
-            <span className="topbar-label">AI</span>
+            <span className="topbar-label">
+              {toolMode === 'web' ? 'Ricerca web' : toolMode === 'image' ? 'Immagini' : 'AI'}
+            </span>
           </div>
 
           <button className="icon-button" onClick={() => setShowSettings(true)} aria-label="Impostazioni">
@@ -606,9 +751,14 @@ function App() {
             <h1>{section}</h1>
             <p>Questa sezione è pronta per essere sviluppata.</p>
             {section === 'Immagini' && (
-              <button className="primary-button" onClick={() => imageRef.current?.click()}>
-                <ImagePlus size={18} /> Seleziona un’immagine
-              </button>
+              <>
+                <button className="primary-button" onClick={() => chooseTool('image')}>
+                  <ImagePlus size={18} /> Crea un’immagine
+                </button>
+                <button className="secondary-button" onClick={() => imageRef.current?.click()}>
+                  <Images size={18} /> Analizza un’immagine
+                </button>
+              </>
             )}
             <button className="secondary-button" onClick={() => setSection('Chat')}>Torna alla chat</button>
           </section>
@@ -644,10 +794,30 @@ function App() {
                         )}
 
                         <MessageContent content={message.content} />
+
+                        {message.role === 'assistant' && message.results && (
+                          <WebResults results={message.results} />
+                        )}
+
+                        {message.role === 'assistant' && message.images?.length > 0 && (
+                          <MessageImages
+                            images={message.images}
+                            onEdit={editImage}
+                          />
+                        )}
                       </div>
                     </article>
                   ))}
-                  {busy && <div className="thinking"><LoaderCircle className="spin" size={18} /> Veyra sta pensando…</div>}
+                  {busy && (
+                    <div className="thinking">
+                      <LoaderCircle className="spin" size={18} />
+                      {toolMode === 'web'
+                        ? 'Sto cercando sul web…'
+                        : toolMode === 'image'
+                        ? 'Sto creando l’immagine…'
+                        : 'Veyra sta pensando…'}
+                    </div>
+                  )}
                   <div ref={endRef} />
                 </div>
               )}
@@ -716,7 +886,13 @@ function App() {
                       send();
                     }
                   }}
-                  placeholder="Scrivi un messaggio a Veyra..."
+                  placeholder={
+                    toolMode === 'web'
+                      ? 'Cosa vuoi cercare sul web?'
+                      : toolMode === 'image'
+                      ? 'Descrivi l’immagine da creare o modificare…'
+                      : 'Scrivi un messaggio a Veyra...'
+                  }
                 />
 
                 <button type="submit" className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
@@ -738,14 +914,14 @@ function App() {
             <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi"><X size={19} /></button>
             <div className="modal-icon"><Settings2 size={23} /></div>
             <h2>Impostazioni Veyra</h2>
-            <p>Le risposte testuali e l'analisi delle immagini usano Groq tramite il backend.</p>
+            <p>La chat usa Groq tramite il backend. La ricerca e la generazione di immagini richiedono endpoint dedicati.</p>
             <div className="info-box">
               <b>Configurazione server</b>
-              <p>La variabile GROQ_API_KEY deve restare nelle variabili d'ambiente di Vercel. Non inserirla nel frontend.</p>
+              <p>La variabile GROQ_API_KEY deve restare nelle variabili d’ambiente di Vercel. Non inserirla nel frontend.</p>
             </div>
             <div className="info-box">
-              <b>Allegati</b>
-              <p>Le immagini vengono inviate al backend. Per leggerle, api/chat.js deve usare un modello Groq compatibile con le immagini.</p>
+              <b>Immagini e ricerca web</b>
+              <p>Le funzioni richiedono servizi esterni configurati nel backend. Il pulsante Modifica prepara la richiesta, ma l’editing effettivo dipende dal servizio immagini.</p>
             </div>
             <button className="primary-button" onClick={() => setShowSettings(false)}>Ho capito</button>
           </div>
