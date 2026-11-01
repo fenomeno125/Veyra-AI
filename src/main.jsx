@@ -202,49 +202,6 @@ function MessageImages({ images = [], onEdit, onOpen }) {
     </div>
   );
 }
-  if (!validImages.length) return null;
-
-  return (
-    <div className="sent-images">
-      {validImages.map((src, index) => (
-        <div className="generated-image-card" key={`${index}-${src.slice(0, 40)}`}>
-          <a
-            className="sent-image-link"
-            href={src}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Apri immagine ${index + 1}`}
-            title="Apri immagine"
-          >
-            <img src={src} alt={`Immagine ${index + 1}`} loading="lazy" />
-          </a>
-
-          {onEdit && (
-            <button
-              className="image-edit-button"
-              type="button"
-              onClick={() => onEdit(src)}
-              title="Modifica questa immagine"
-            >
-              <Pencil size={14} />
-              Modifica
-            </button>
-          )}
-
-          <a
-            className="image-download-button"
-            href={src}
-            download={`veyra-immagine-${index + 1}.png`}
-            title="Scarica immagine"
-            aria-label="Scarica immagine"
-          >
-            <Download size={15} />
-          </a>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function WebResults({ results = [] }) {
   if (!Array.isArray(results) || !results.length) return null;
