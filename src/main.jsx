@@ -860,85 +860,92 @@ function chooseTool(id) {
                 </div>
               )}
 
-              <form className="composer" onSubmit={e => { e.preventDefault(); send(); }}>
-                <div className="plus-wrap">
-                  <button type="button" className="plus-button" onClick={() => setShowTools(v => !v)} aria-label="Apri strumenti">
-                    <Plus size={22} />
-                  </button>
+             
+<form className="composer" onSubmit={e => { e.preventDefault(); send(); }}>
+  <div className="plus-wrap">
+    <button
+      type="button"
+      className="plus-button"
+      onClick={() => setShowTools(v => !v)}
+      aria-label="Apri strumenti"
+    >
+      <Plus size={22} />
+    </button>
 
+    {showTools && (
+      <div className="tools-menu">
+        <h3>Strumenti</h3>
 
-{showTools && (
-  <div className="tools-menu">
-    <h3>Strumenti</h3>
-    {tools.map(tool => {
-      const Icon = tool.icon;
-      return (
-        <button
-          type="button"
-          className="tool-option"
-          key={tool.id}
-          onClick={() => chooseTool(tool.id)}
-        >
-          <span className="tool-icon">
-            <Icon size={19} />
-          </span>
+        {tools.map(tool => {
+          const Icon = tool.icon;
 
-          <span className="tool-copy">
-            <b>
-              {tool.id === 'web' && toolMode === 'web'
-                ? 'Disattiva ricerca web'
-                : tool.label}
-            </b>
-            <small>
-              {tool.id === 'web' && toolMode === 'web'
-                ? 'Torna alla chat normale'
-                : tool.desc}
-            </small>
-          </span>
-        </button>
-      );
-    })}
+          return (
+            <button
+              type="button"
+              className="tool-option"
+              key={tool.id}
+              onClick={() => chooseTool(tool.id)}
+            >
+              <span className="tool-icon">
+                <Icon size={19} />
+              </span>
+
+              <span className="tool-copy">
+                <b>
+                  {tool.id === 'web' && toolMode === 'web'
+                    ? 'Disattiva ricerca web'
+                    : tool.label}
+                </b>
+
+                <small>
+                  {tool.id === 'web' && toolMode === 'web'
+                    ? 'Torna alla chat normale'
+                    : tool.desc}
+                </small>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    )}
   </div>
-)}
 
-</div>
-</div>
-
-<textarea
-  ref={textareaRef}
-  rows="1"
-  value={text}
-  onChange={e => {
-    setText(e.target.value);
-    e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
-  }}
-  onKeyDown={e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
+  <textarea
+    ref={textareaRef}
+    rows="1"
+    value={text}
+    onChange={e => {
+      setText(e.target.value);
+      e.target.style.height = 'auto';
+      e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
+    }}
+    onKeyDown={e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    }}
+    placeholder={
+      toolMode === 'web'
+        ? 'Cosa vuoi cercare sul web?'
+        : toolMode === 'image'
+        ? 'Descrivi l’immagine da creare o modificare…'
+        : 'Scrivi un messaggio a Veyra...'
     }
-  }}
-  placeholder={
-    toolMode === 'web'
-      ? 'Cosa vuoi cercare sul web?'
-      : toolMode === 'image'
-      ? 'Descrivi l’immagine da creare o modificare…'
-      : 'Scrivi un messaggio a Veyra...'
-  }
-/>
+  />
 
-<button
-  type="submit"
-  className="send-button"
-  disabled={(!text.trim() && !attachments.length) || busy}
-  aria-label="Invia"
->
-  {busy
-    ? <LoaderCircle className="spin" size={20} />
-    : <ArrowUp size={21} />}
-</button>
+  <button
+    type="submit"
+    className="send-button"
+    disabled={(!text.trim() && !attachments.length) || busy}
+    aria-label="Invia"
+  >
+    {busy
+      ? <LoaderCircle className="spin" size={20} />
+      : <ArrowUp size={21} />}
+  </button>
 </form>
+
 
 <input
   ref={fileRef}
