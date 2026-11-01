@@ -1,16 +1,9 @@
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({
       error: "Metodo non consentito. Usa POST."
-    });
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "OPENAI_API_KEY non configurata su Vercel."
     });
   }
 
@@ -25,7 +18,7 @@ export default async function handler(req, res) {
     });
   }
 
-  if (prompt.length > 4000) {
+  if (prompt.length > 2000) {
     return res.status(400).json({
       error: "Descrizione troppo lunga."
     });
@@ -33,52 +26,45 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(
-      "https://api.openai.com/v1/images/generations",
+      "https://stable-diffusion-xl.endpoints.kepler.ai.cloud.ovh.net/api/text2image",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`
+          "Accept": "application/octet-stream"
         },
         body: JSON.stringify({
-          model: "gpt-image-1",
           prompt,
-          size: "1024x1024",
-          quality: "medium",
-          n: 1
+          negative_prompt: "blurry, low quality, distorted"
         })
       }
     );
 
-    const data = await response.json();
-
     if (!response.ok) {
-      console.error("Errore immagini:", data?.error);
+      const error = await response.text();
+      console.error("OVH image error:", response.status, error);
 
       return res.status(502).json({
-        error: data?.error?.message ||
-          "Non è stato possibile generare l'immagine."
+        error: "Il servizio immagini non è disponibile. Riprova tra poco."
       });
     }
 
-    const image = data?.data?.[0]?.b64_json;
+    const imageBuffer = Buffer.from(
+      await response.arrayBuffer()
+    );
 
-    if (!image) {
-      return res.status(502).json({
-        error: "Il servizio non ha restituito un'immagine."
-      });
-    }
+    const image = imageBuffer.toString("base64");
 
     return res.status(200).json({
-      image: `data:image/png;base64,${image}`,
-      reply: "Ecco l'immagine generata."
+      image: `data:image/jpeg;base64,${image}`,
+      reply: "Ecco l'immagine generata da Veyra!"
     });
 
   } catch (error) {
     console.error("Errore generazione immagini:", error);
 
     return res.status(500).json({
-      error: "Errore interno durante la generazione."
+      error: "Errore durante la generazione dell'immagine."
     });
   }
 }
