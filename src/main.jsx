@@ -1,6 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Analytics } from '@vercel/analytics/react';
 import {
   Sparkles, Plus, Settings2, ArrowUp, X, ImagePlus, Images,
   FileText, Globe, Code2, GraduationCap, Search, Paperclip,
@@ -930,5 +931,9 @@ function App() {
     </div>
   );
 }
-
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(
+  <>
+    <App />
+    <Analytics />
+  </>
+);
