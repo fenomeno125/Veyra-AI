@@ -874,7 +874,16 @@ function chooseTool(id) {
                         return (
                           <button type="button" className="tool-option" key={tool.id} onClick={() => chooseTool(tool.id)}>
                             <span className="tool-icon"><Icon size={19} /></span>
-                            <span className="tool-copy"><b>{tool.label}</b><small>{tool.desc}</small></span>
+                            <span className="tool-copy"><b>
+  {tool.id === 'web' && toolMode === 'web'
+    ? 'Disattiva ricerca web'
+    : tool.label}
+</b>
+<small>
+  {tool.id === 'web' && toolMode === 'web'
+    ? 'Torna alla chat normale'
+    : tool.desc}
+</small>
                           </button>
                         );
                       })}
