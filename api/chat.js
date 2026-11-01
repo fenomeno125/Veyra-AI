@@ -1,21 +1,23 @@
-
-const MODEL = "qwen/qwen3.8-27b";
+const MAX_MESSAGES = 30;
+const MAX_TEXT_LENGTH = 12000;
 const MAX_IMAGES = 3;
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_HISTORY_MESSAGES = 8;
+const MAX_IMAGE_DATA_URL_LENGTH = 4_000_000;
 const MAX_RETRIES = 2;
 
-const SYSTEM_PROMPT = [
-  "Sei Veyra, un assistente preciso, utile e naturale.",
-  "Rispondi nella lingua usata dall'utente.",
-  "Rispondi direttamente alla domanda, con informazioni corrette.",
-  "Cerca di concludere ogni risposta con frasi complete.",
-  "Non inventare informazioni e dichiara quando non sei sicuro.",
-  "Se analizzi immagini, descrivi solo ciò che è effettivamente visibile.",
-  "Se un testo nell'immagine è illeggibile, dichiaralo.",
-  "Se spieghi un esercizio, procedi passo dopo passo.",
-  "Adatta la lunghezza della risposta alla richiesta."
-].join(" ");
+function validImageDataUrl(value) {
+  return (
+    typeof value === "string" &&
+    /^data:image\/(jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=\r\n]+$/i.test(value) &&
+    value.length <= MAX_IMAGE_DATA_URL_LENGTH
+  );
+}
+
+function hasImage(messages) {
+  return messages.some(message =>
+    Array.isArray(message.content) &&
+    message.content.some(part => part?.type === "image_url")
+  );
+}
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -26,59 +28,78 @@ function retryDelay(response, attempt) {
 
   if (retryAfter) {
     const seconds = Number(retryAfter);
+
     if (Number.isFinite(seconds) && seconds >= 0) {
       return Math.min(seconds * 1000, 10000);
-    }
-
-    const date = Date.parse(retryAfter);
-    if (Number.isFinite(date)) {
-      return Math.min(Math.max(date - Date.now(), 0), 10000);
     }
   }
 
   return Math.min(1500 * (2 ** attempt), 6000);
 }
 
-function validateImage(image) {
-  if (typeof image !== "string") {
-    return { error: "Una delle immagini non è valida." };
-  }
+const SYSTEM_PROMPT = [
+  "Sei Veyra AI, un assistente intelligente, preciso, competente e naturale.",
 
-  const match = image.match(
-    /^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=\s]+)$/i
-  );
+  "LINGUAGGIO:",
+  "Rispondi nella lingua dell'utente.",
+  "Usa un linguaggio naturale, chiaro e scorrevole.",
+  "Adatta la lunghezza alla complessità della richiesta.",
+  "Per domande semplici rispondi direttamente.",
+  "Per argomenti complessi fornisci spiegazioni approfondite e ben organizzate.",
+  "Evita ripetizioni, introduzioni inutili e risposte eccessivamente schematiche.",
 
-  if (!match) {
-    return { error: "Formato supportato: PNG, JPG o WebP." };
-  }
+  "QUALITÀ:",
+  "Comprendi attentamente la richiesta prima di rispondere.",
+  "Rispondi esattamente alla domanda senza andare fuori argomento.",
+  "Non inventare fatti, statistiche, fonti, citazioni o collegamenti.",
+  "Distingui i fatti verificati dalle ipotesi.",
+  "Se non conosci una risposta, dichiaralo chiaramente.",
+  "Se mancano informazioni essenziali, chiedi un chiarimento.",
+  "Correggi con gentilezza eventuali errori presenti nella domanda.",
 
-  const base64 = match[2].replace(/\s/g, "");
-  const bytes = Math.floor(base64.length * 3 / 4);
+  "MATEMATICA:",
+  "Controlla calcoli, formule, segni, unità di misura e risultati.",
+  "Negli esercizi mostra i passaggi necessari in ordine.",
+  "Non saltare passaggi importanti.",
+  "Verifica il risultato nel problema originale quando possibile.",
+  "Non modificare arbitrariamente i dati dell'esercizio.",
 
-  if (bytes > MAX_IMAGE_BYTES) {
-    return { error: "Ogni immagine deve essere inferiore a 5 MB." };
-  }
+  "PROGRAMMAZIONE:",
+  "Fornisci codice completo e coerente quando viene richiesto.",
+  "Controlla sintassi, variabili, dipendenze e possibili errori.",
+  "Quando correggi codice esistente, preservane struttura e compatibilità.",
+  "Spiega dove inserire il codice e quali modifiche sono necessarie.",
+  "Non dichiarare di aver eseguito o testato codice se non lo hai fatto.",
 
-  return { value: image };
-}
+  "STUDIO:",
+  "Spiega gli argomenti in modo progressivo e comprensibile.",
+  "Usa esempi concreti quando sono utili.",
+  "Adatta le spiegazioni al livello dell'utente.",
+  "Rispetta le richieste di risposte brevi o approfondite.",
 
-function makeHistory(messages, lastUserIndex) {
-  return messages
-    .slice(0, lastUserIndex)
-    .filter(message =>
-      message &&
-      ["user", "assistant"].includes(message.role) &&
-      typeof message.content === "string" &&
-      message.content.trim()
-    )
-    .slice(-MAX_HISTORY_MESSAGES)
-    .map(message => ({
-      role: message.role,
-      content: message.content.slice(-6000)
-    }));
-}
+  "CONTESTO:",
+  "Usa i messaggi precedenti quando sono pertinenti.",
+  "Non chiedere informazioni già presenti nella conversazione disponibile.",
+  "Non fingere di ricordare informazioni a cui non hai accesso.",
+
+  "IMMAGINI:",
+  "Quando ricevi immagini, analizza solo ciò che è effettivamente visibile.",
+  "Descrivi con attenzione testi, oggetti e dettagli.",
+  "Se un testo è illeggibile, dichiaralo.",
+  "Non inventare dettagli mancanti.",
+  "Se non sei sicuro di un elemento, segnala l'incertezza.",
+
+  "TRASPARENZA:",
+  "Non mostrare ragionamenti interni privati.",
+  "Fornisci invece passaggi utili e spiegazioni verificabili.",
+  "Non dichiarare di aver usato strumenti o cercato sul web se non è realmente avvenuto.",
+  "Non promettere risultati che non puoi garantire.",
+  "La precisione e l'onestà vengono prima della velocità."
+].join(" ");
 
 export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({
@@ -89,146 +110,185 @@ export default async function handler(req, res) {
   const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    return res.status(500).json({
-      error: "Chiave API Groq non configurata su Vercel."
+    return res.status(503).json({
+      error: "Manca GROQ_API_KEY nelle variabili d'ambiente di Vercel."
     });
   }
 
   try {
-    const { messages, images = [] } = req.body ?? {};
+    const input = req.body?.messages;
+    const requestedMode = ["fast", "smart", "web"].includes(req.body?.mode)
+      ? req.body.mode
+      : "smart";
 
-    if (!Array.isArray(messages) || !Array.isArray(images)) {
+    if (
+      !Array.isArray(input) ||
+      input.length === 0 ||
+      input.length > MAX_MESSAGES
+    ) {
       return res.status(400).json({
-        error: "Richiesta non valida."
+        error: "Conversazione non valida. Riprova con meno messaggi."
       });
     }
 
-    if (images.length > MAX_IMAGES) {
-      return res.status(400).json({
-        error: "Puoi allegare massimo 3 immagini per richiesta."
-      });
-    }
+    let imageCount = 0;
 
-    const lastUserIndex = messages
-      .map(message => message?.role)
-      .lastIndexOf("user");
-
-    if (lastUserIndex < 0) {
-      return res.status(400).json({
-        error: "Scrivi un messaggio prima di inviare."
-      });
-    }
-
-    const lastUser = messages[lastUserIndex];
-
-    if (typeof lastUser.content !== "string") {
-      return res.status(400).json({
-        error: "Il messaggio non è valido."
-      });
-    }
-
-    const cleanImages = [];
-
-    for (const image of images) {
-      const result = validateImage(image);
-
-      if (result.error) {
-        return res.status(400).json({
-          error: result.error
-        });
-      }
-
-      cleanImages.push(result.value);
-    }
-
-    const userText = lastUser.content.trim() ||
-      (cleanImages.length
-        ? "Analizza le immagini allegate e descrivi ciò che è rilevante."
-        : "");
-
-    if (!userText) {
-      return res.status(400).json({
-        error: "Scrivi un messaggio o allega un'immagine."
-      });
-    }
-
-    const conversation = [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...makeHistory(messages, lastUserIndex)
-    ];
-
-    const content = [{
-      type: "text",
-      text: userText
+    const messages = [{
+      role: "system",
+      content: SYSTEM_PROMPT
     }];
 
-    for (const image of cleanImages) {
-      content.push({
-        type: "image_url",
-        image_url: { url: image }
+    for (const item of input) {
+      if (!item || !["user", "assistant"].includes(item.role)) {
+        continue;
+      }
+
+      if (typeof item.content === "string") {
+        messages.push({
+          role: item.role,
+          content: item.content.slice(0, MAX_TEXT_LENGTH)
+        });
+
+        continue;
+      }
+
+      if (item.role !== "user" || !Array.isArray(item.content)) {
+        continue;
+      }
+
+      const content = [];
+
+      for (const part of item.content) {
+        if (
+          part?.type === "text" &&
+          typeof part.text === "string"
+        ) {
+          content.push({
+            type: "text",
+            text: part.text.slice(0, MAX_TEXT_LENGTH)
+          });
+        } else if (part?.type === "image_url") {
+          const url = part.image_url?.url;
+
+          if (!validImageDataUrl(url)) {
+            return res.status(400).json({
+              error: "Un'immagine non è valida o supera il limite consentito."
+            });
+          }
+
+          imageCount++;
+
+          if (imageCount > MAX_IMAGES) {
+            return res.status(400).json({
+              error: `Puoi inviare al massimo ${MAX_IMAGES} immagini per richiesta.`
+            });
+          }
+
+          content.push({
+            type: "image_url",
+            image_url: { url }
+          });
+        }
+      }
+
+      if (content.length > 0) {
+        messages.push({
+          role: item.role,
+          content
+        });
+      }
+    }
+
+    if (messages.length < 2) {
+      return res.status(400).json({
+        error: "Aggiungi un messaggio prima di inviare."
       });
     }
 
-    conversation.push({
-      role: "user",
-      content: cleanImages.length ? content : userText
-    });
+    const containsImages = hasImage(messages);
+    const mode = containsImages && requestedMode === "web"
+      ? "smart"
+      : requestedMode;
 
-    let response;
-    let data;
+    const model = mode === "web"
+      ? (process.env.GROQ_WEB_MODEL || "openai/gpt-oss-120b")
+      : (process.env.GROQ_MODEL || "qwen/qwen3.8-27b");
+
+    const payload = {
+      model,
+      messages,
+      max_completion_tokens: 2500,
+      stream: false,
+      reasoning_format: "hidden"
+    };
+
+    if (mode === "fast") {
+      payload.reasoning_effort = "none";
+      payload.temperature = 0.7;
+    } else {
+      payload.reasoning_effort = mode === "web"
+        ? "medium"
+        : "high";
+    }
+
+    if (mode === "web") {
+      payload.tools = [{
+        type: "browser_search"
+      }];
+
+      payload.tool_choice = "required";
+      payload.citation_options = "enabled";
+    }
+
+    let upstream;
+    let result;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      response = await fetch(
+      upstream = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify({
-            model: MODEL,
-            messages: conversation,
-            temperature: 0.3,
-            max_tokens: 1600
-          })
+          body: JSON.stringify(payload)
         }
       );
 
-      data = await response.json().catch(() => ({}));
+      result = await upstream.json().catch(() => ({}));
 
-      if (response.ok) break;
+      if (upstream.ok) {
+        break;
+      }
 
-      const isRateLimit = response.status === 429;
-
-      if (isRateLimit && attempt < MAX_RETRIES) {
-        await wait(retryDelay(response, attempt));
+      if (upstream.status === 429 && attempt < MAX_RETRIES) {
+        await wait(retryDelay(upstream, attempt));
         continue;
       }
 
-      if (isRateLimit) {
+      console.error("Groq API error:", {
+        status: upstream.status,
+        error: result?.error?.message
+      });
+
+      if (upstream.status === 429) {
         res.setHeader("Retry-After", "3");
 
         return res.status(429).json({
-          error: "Groq è temporaneamente occupato. Aspetta qualche secondo e riprova.",
+          error: "Groq è temporaneamente occupato. Riprova tra poco.",
           retryable: true
         });
       }
 
-      console.error("Errore Groq:", {
-        status: response.status,
-        error: data?.error?.message
-      });
-
-      return res.status(response.status).json({
-        error: data?.error?.message ||
-          "Errore durante la richiesta a Groq."
+      return res.status(502).json({
+        error: upstream.status === 400
+          ? "Il modello ha rifiutato la richiesta. Controlla la configurazione."
+          : "Il servizio AI non ha risposto. Controlla le impostazioni di Vercel."
       });
     }
 
-    const choice = data?.choices?.[0];
-    const reply = choice?.message?.content;
-    const finishReason = choice?.finish_reason;
+    const reply = result?.choices?.[0]?.message?.content;
 
     if (typeof reply !== "string" || !reply.trim()) {
       return res.status(502).json({
@@ -238,13 +298,15 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       reply: reply.trim(),
-      truncated: finishReason === "length"
+      mode,
+      truncated: result?.choices?.[0]?.finish_reason === "length"
     });
+
   } catch (error) {
-    console.error("Errore API Veyra:", error);
+    console.error("Veyra API error:", error?.message || error);
 
     return res.status(500).json({
-      error: "Errore interno del server durante la richiesta."
+      error: "Errore temporaneo del server. Riprova."
     });
   }
 }
