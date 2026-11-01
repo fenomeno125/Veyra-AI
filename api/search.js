@@ -69,16 +69,17 @@ export default async function handler(req, res) {
 
     const data = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
-      console.error("Groq browser search error:", {
-        status: response.status,
-        error: data?.error?.message
-      });
+   if (!response.ok) {
+  console.error("Groq browser search error:", {
+    status: response.status,
+    error: data?.error
+  });
 
-      return res.status(502).json({
-        error: "La ricerca web non è riuscita. Controlla il modello e riprova."
-      });
-    }
+  return res.status(502).json({
+    error: data?.error?.message || "Errore Groq sconosciuto.",
+    status: response.status
+  });
+}
 
     const message = data?.choices?.[0]?.message;
     const reply = message?.content;
