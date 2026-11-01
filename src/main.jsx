@@ -971,12 +971,8 @@ function chooseTool(id) {
 </div>
 </>
 )}
-</section>
-</>
-)}
-
 </main>
-
+              
 {showSettings && (
   <div className="overlay" onClick={() => setShowSettings(false)}>
     <div className="modal" onClick={e => e.stopPropagation()}>
