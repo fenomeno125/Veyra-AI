@@ -581,39 +581,50 @@ function editImage(src) {
     }
   }
 
-  function chooseTool(id) {
-    setShowTools(false);
-    setToolMode(id === 'web' || id === 'image' ? id : 'chat');
+  
+function chooseTool(id) {
+  setShowTools(false);
 
-    if (id === 'files') {
-      fileRef.current?.click();
-      return;
-    }
-
-    if (id === 'vision') {
-      imageRef.current?.click();
-      setNotice('Seleziona una o più immagini da analizzare.');
-      return;
-    }
-
-    const prompts = {
-      image: '',
-      web: '',
-      study: 'Aiutami a studiare e capire un argomento con esempi semplici.',
-      code: 'Aiutami a scrivere o correggere del codice.'
-    };
-
-    setText(prompts[id] || '');
-    setNotice(
-      id === 'image'
-        ? 'Modalità generazione immagini attiva. Descrivi cosa vuoi creare.'
-        : id === 'web'
-        ? 'Modalità ricerca web attiva. Scrivi la tua ricerca.'
-        : ''
-    );
-
+  // Se la ricerca web è già attiva, disattivala.
+  if (id === 'web' && toolMode === 'web') {
+    setToolMode('chat');
+    setNotice('Ricerca web disattivata. Veyra risponderà normalmente.');
     textareaRef.current?.focus();
+    return;
   }
+
+  setToolMode(id === 'web' || id === 'image' ? id : 'chat');
+
+  if (id === 'files') {
+    fileRef.current?.click();
+    return;
+  }
+
+  if (id === 'vision') {
+    imageRef.current?.click();
+    setNotice('Seleziona una o più immagini da analizzare.');
+    return;
+  }
+
+  const prompts = {
+    image: '',
+    web: '',
+    study: 'Aiutami a studiare e capire un argomento con esempi semplici.',
+    code: 'Aiutami a scrivere o correggere del codice.'
+  };
+
+  setText(prompts[id] || '');
+  setNotice(
+    id === 'image'
+      ? 'Modalità generazione immagini attiva. Descrivi cosa vuoi creare.'
+      : id === 'web'
+      ? 'Modalità ricerca web attiva. Clicca di nuovo per disattivarla.'
+      : ''
+  );
+
+  textareaRef.current?.focus();
+}
+
 
   const visibleChats = conversations
     .filter(c => c.title.toLowerCase().includes(searchText.toLowerCase()))
