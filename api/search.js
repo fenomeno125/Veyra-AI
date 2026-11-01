@@ -92,44 +92,59 @@ export default async function handler(req, res) {
       });
     }
 
-    const citations = Array.isArray(message?.citations)
-      ? message.citations
+    // Recupera i risultati effettivi degli strumenti Groq.
+    const executedTools = Array.isArray(message?.executed_tools)
+      ? message.executed_tools
       : [];
 
-    const results = citations
-      .map((citation) => {
-        if (typeof citation === "string") {
-          if (!/^https?:\/\//i.test(citation)) return null;
+    const results = [];
 
-          return {
-            title: citation,
-            url: citation,
-            domain: "",
-            snippet: ""
-          };
-        }
+    for (const tool of executedTools) {
+      const browserResults = Array.isArray(tool?.browser_results)
+        ? tool.browser_results
+        : [];
 
-        const url = citation?.url || citation?.uri || "";
+      const searchResults = Array.isArray(tool?.search_results?.results)
+        ? tool.search_results.results
+        : [];
+
+      for (const item of [...browserResults, ...searchResults]) {
+        const url = item?.url;
 
         if (
           typeof url !== "string" ||
           !/^https?:\/\//i.test(url)
         ) {
-          return null;
+          continue;
         }
 
-        return {
-          title: citation.title || citation.name || url,
+        let domain = "";
+
+        try {
+          domain = new URL(url).hostname.replace(/^www\./, "");
+        } catch {
+          domain = "";
+        }
+
+        results.push({
+          title: item?.title || domain || url,
           url,
-          domain: citation.domain || "",
-          snippet: citation.snippet || citation.description || ""
-        };
-      })
-      .filter(Boolean);
+          domain,
+          snippet: item?.content || ""
+        });
+      }
+    }
+
+    // Elimina eventuali URL duplicati.
+    const uniqueResults = [
+      ...new Map(
+        results.map((item) => [item.url, item])
+      ).values()
+    ];
 
     return res.status(200).json({
       reply: reply.trim(),
-      results
+      results: uniqueResults
     });
 
   } catch (error) {
