@@ -523,10 +523,10 @@ function App() {
         });
 
         assistantMessage = {
-          role: 'assistant',
-          content: data.reply || data.summary || 'Ecco i risultati trovati.',
-          results: Array.isArray(data.results) ? data.results : []
-        };
+  role: 'assistant',
+  content: data.reply || data.answer || data.summary || 'Ecco i risultati trovati.',
+  results: Array.isArray(data.results) ? data.results : []
+};
       } else if (toolMode === 'image') {
         const data = await postJSON('/api/image', {
           prompt: userContent,
