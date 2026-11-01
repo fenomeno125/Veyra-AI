@@ -45,13 +45,19 @@ export default async function handler(req, res) {
               role: "system",
               content: [
                 "Sei Veyra AI, un assistente che effettua ricerche sul web.",
-                "Cerca informazioni pertinenti e aggiornate alla domanda.",
+                "Cerca informazioni pertinenti e aggiornate.",
                 "Rispondi nella lingua dell'utente.",
-                "Distingui i fatti verificabili dalle ipotesi.",
+                "Fornisci risposte concise, chiare e ben organizzate.",
+                "Usa solo le informazioni necessarie per rispondere.",
+                "Riassumi le pagine web con parole tue.",
+                "Non copiare il testo integrale delle pagine.",
+                "Non mostrare estratti grezzi, righe L0/L1, metadati o blocchi tecnici.",
+                "Non mostrare codice, JSON o contenuti interni degli strumenti.",
                 "Cita le fonti utilizzate quando sono disponibili.",
                 "Non inventare fonti, URL, date o informazioni.",
                 "Se le fonti sono insufficienti o discordanti, dichiaralo.",
-                "Organizza la risposta in modo chiaro e naturale."
+                "Preferisci elenchi brevi invece di tabelle.",
+                "Evita introduzioni lunghe e ripetizioni."
               ].join(" ")
             },
             {
@@ -62,7 +68,7 @@ export default async function handler(req, res) {
           tools: [{ type: "browser_search" }],
           tool_choice: "required",
           reasoning_effort: "low",
-          max_completion_tokens: 2500,
+          max_completion_tokens: 1800,
           temperature: 1,
           stream: false
         })
@@ -92,7 +98,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Recupera i risultati effettivi degli strumenti Groq.
+    // Recupera i risultati degli strumenti Groq.
     const executedTools = Array.isArray(message?.executed_tools)
       ? message.executed_tools
       : [];
@@ -135,7 +141,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Elimina eventuali URL duplicati.
+    // Rimuove i collegamenti duplicati.
     const uniqueResults = [
       ...new Map(
         results.map((item) => [item.url, item])
