@@ -408,16 +408,15 @@ function App() {
       return old.filter(file => file.id !== id);
     });
   }
-
-  function editImage(src) {
-    setEditingImage(src);
-    setToolMode('image');
-    setText('Modifica questa immagine: ');
-    setNotice(
-      'Descrivi la modifica che desideri. Il servizio immagini dovrà supportare l’editing per modificare davvero l’immagine.'
-    );
-    textareaRef.current?.focus();
-  }
+function editImage(src) {
+  setEditingImage(src);
+  setToolMode('image');
+  setText('Modifica questa immagine: ');
+  setNotice(
+    'Immagine originale caricata. Descrivi cosa vuoi modificare.'
+  );
+  textareaRef.current?.focus();
+}
 
   async function send(value = text) {
     const prompt = value.trim();
