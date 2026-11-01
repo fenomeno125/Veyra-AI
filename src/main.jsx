@@ -909,28 +909,54 @@ function App() {
         )}
       </main>
 
-      {showSettings && (
-        <div className="overlay" onClick={() => setShowSettings(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi"><X size={19} /></button>
-            <div className="modal-icon"><Settings2 size={23} /></div>
-            <h2>Impostazioni Veyra</h2>
-            <p>La chat usa Groq tramite il backend. La ricerca e la generazione di immagini richiedono endpoint dedicati.</p>
-            <div className="info-box">
-              <b>Configurazione server</b>
-              <p>La variabile GROQ_API_KEY deve restare nelle variabili d’ambiente di Vercel. Non inserirla nel frontend.</p>
-            </div>
-            <div className="info-box">
-              <b>Immagini e ricerca web</b>
-              <p>Le funzioni richiedono servizi esterni configurati nel backend. Il pulsante Modifica prepara la richiesta, ma l’editing effettivo dipende dal servizio immagini.</p>
-            </div>
-            <button className="primary-button" onClick={() => setShowSettings(false)}>Ho capito</button>
-          </div>
-        </div>
-      )}
+    {showSettings && (
+  <div className="overlay" onClick={() => setShowSettings(false)}>
+    <div className="modal" onClick={e => e.stopPropagation()}>
+      <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi">
+        <X size={19} />
+      </button>
+      <div className="modal-icon"><Settings2 size={23} /></div>
+      <h2>Impostazioni Veyra</h2>
+      <p>La chat usa Groq tramite il backend. La ricerca e la generazione di immagini richiedono endpoint dedicati.</p>
+      <div className="info-box">
+        <b>Configurazione server</b>
+        <p>La variabile GROQ_API_KEY deve restare nelle variabili d’ambiente di Vercel. Non inserirla nel frontend.</p>
+      </div>
+      <div className="info-box">
+        <b>Immagini e ricerca web</b>
+        <p>Le funzioni richiedono servizi esterni configurati nel backend. Il pulsante Modifica prepara la richiesta, ma l’editing effettivo dipende dal servizio immagini.</p>
+      </div>
+      <button className="primary-button" onClick={() => setShowSettings(false)}>Ho capito</button>
     </div>
+  </div>
+)}
+
+{lightboxImage && (
+  <div
+    className="image-lightbox"
+    onClick={() => setLightboxImage(null)}
+  >
+    <button
+      className="lightbox-close"
+      type="button"
+      onClick={() => setLightboxImage(null)}
+      aria-label="Chiudi immagine"
+    >
+      <X size={25} />
+    </button>
+
+    <img
+      src={lightboxImage}
+      alt="Immagine ingrandita"
+      onClick={e => e.stopPropagation()}
+    />
+  </div>
+)}
+
+</div>
   );
 }
+
 createRoot(document.getElementById('root')).render(
   <>
     <App />
