@@ -203,37 +203,44 @@ function MessageImages({ images = [], onEdit, onOpen }) {
   );
 }
 
+
 function WebResults({ results = [] }) {
   if (!Array.isArray(results) || !results.length) return null;
+
+  const validResults = results.filter(result =>
+    typeof result.url === 'string' &&
+    /^https?:\/\//i.test(result.url) &&
+    !/viewing lines|no find results/i.test(result.title || '')
+  );
+
+  if (!validResults.length) return null;
 
   return (
     <div className="web-results">
       <div className="web-results-heading">
         <Globe size={16} />
-        <b>Risultati dal web</b>
+        <b>Fonti consultate</b>
       </div>
 
-      {results.map((result, index) => {
-        const url = typeof result.url === 'string' ? result.url : '';
+      {validResults.map((result, index) => (
+        <article className="web-result" key={`${result.url}-${index}`}>
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="web-result-title"
+          >
+            {result.title || 'Apri la fonte'}
+            <ExternalLink size={13} />
+          </a>
 
-        return (
-          <article className="web-result" key={`${url}-${index}`}>
-            <a
-              href={url || undefined}
-              target="_blank"
-              rel="noreferrer"
-              className="web-result-title"
-            >
-              {result.title || 'Risultato senza titolo'}
-              <ExternalLink size={13} />
-            </a>
-            {result.domain && (
-              <div className="web-result-domain">{result.domain}</div>
-            )}
-            <p>{result.snippet || result.description || ''}</p>
-          </article>
-        );
-      })}
+          {result.domain && (
+            <div className="web-result-domain">
+              {result.domain}
+            </div>
+          )}
+        </article>
+      ))}
     </div>
   );
 }
