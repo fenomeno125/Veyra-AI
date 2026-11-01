@@ -295,8 +295,6 @@ function fileToDataURL(file) {
 }
 
 function App() {
-  const [editingImage, setEditingImage] = useState(null);
-  const [lightboxImage, setLightboxImage] = useState(null);
   const [conversations, setConversations] = useState(readConversations);
   const [activeId, setActiveId] = useState(null);
   const [text, setText] = useState('');
@@ -312,7 +310,8 @@ function App() {
   const [menuId, setMenuId] = useState(null);
   const [toolMode, setToolMode] = useState('chat');
   const [editingImage, setEditingImage] = useState(null);
-
+  const [lightboxImage, setLightboxImage] = useState(null);
+  
   const fileRef = useRef(null);
   const imageRef = useRef(null);
   const endRef = useRef(null);
@@ -842,13 +841,13 @@ function App() {
                         {message.role === 'assistant' && message.results && (
                           <WebResults results={message.results} />
                         )}
-
                         {message.role === 'assistant' && message.images?.length > 0 && (
-                          <MessageImages
-                            images={message.images}
-                            onEdit={editImage}
-                          />
-                        )}
+                         <MessageImages
+                         images={message.images}
+                         onEdit={editImage}
+                        onOpen={setLightboxImage}
+                      />
+                    )}
                       </div>
                     </article>
                   ))}
