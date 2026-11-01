@@ -866,74 +866,111 @@ function chooseTool(id) {
                     <Plus size={22} />
                   </button>
 
-                  {showTools && (
-                    <div className="tools-menu">
-                      <h3>Strumenti</h3>
-                      {tools.map(tool => {
-                        const Icon = tool.icon;
-                        return (
-                         <button
-  type="button"
-  className="tool-option"
-  key={tool.id}
-  onClick={() => chooseTool(tool.id)}
+
+{showTools && (
+  <div className="tools-menu">
+    <h3>Strumenti</h3>
+    {tools.map(tool => {
+      const Icon = tool.icon;
+      return (
+        <button
+          type="button"
+          className="tool-option"
+          key={tool.id}
+          onClick={() => chooseTool(tool.id)}
+        >
+          <span className="tool-icon">
+            <Icon size={19} />
+          </span>
+
+          <span className="tool-copy">
+            <b>
+              {tool.id === 'web' && toolMode === 'web'
+                ? 'Disattiva ricerca web'
+                : tool.label}
+            </b>
+            <small>
+              {tool.id === 'web' && toolMode === 'web'
+                ? 'Torna alla chat normale'
+                : tool.desc}
+            </small>
+          </span>
+        </button>
+      );
+    })}
+  </div>
+)}
+
+</div>
+</div>
+
+<textarea
+  ref={textareaRef}
+  rows="1"
+  value={text}
+  onChange={e => {
+    setText(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
+  }}
+  onKeyDown={e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  }}
+  placeholder={
+    toolMode === 'web'
+      ? 'Cosa vuoi cercare sul web?'
+      : toolMode === 'image'
+      ? 'Descrivi l’immagine da creare o modificare…'
+      : 'Scrivi un messaggio a Veyra...'
+  }
+/>
+
+<button
+  type="submit"
+  className="send-button"
+  disabled={(!text.trim() && !attachments.length) || busy}
+  aria-label="Invia"
 >
-  <span className="tool-icon">
-    <Icon size={19} />
-  </span>
-
-  <span className="tool-copy">
-    <b>
-      {tool.id === 'web' && toolMode === 'web'
-        ? 'Disattiva ricerca web'
-        : tool.label}
-    </b>
-    <small>
-      {tool.id === 'web' && toolMode === 'web'
-        ? 'Torna alla chat normale'
-        : tool.desc}
-    </small>
-  </span>
+  {busy
+    ? <LoaderCircle className="spin" size={20} />
+    : <ArrowUp size={21} />}
 </button>
+</form>
 
-                <textarea
-                  ref={textareaRef}
-                  rows="1"
-                  value={text}
-                  onChange={e => {
-                    setText(e.target.value);
-                    e.target.style.height = 'auto';
-                    e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  placeholder={
-                    toolMode === 'web'
-                      ? 'Cosa vuoi cercare sul web?'
-                      : toolMode === 'image'
-                      ? 'Descrivi l’immagine da creare o modificare…'
-                      : 'Scrivi un messaggio a Veyra...'
-                  }
-                />
+<input
+  ref={fileRef}
+  type="file"
+  hidden
+  multiple
+  accept="image/*,.pdf,.txt,.md,.csv"
+  onChange={e => addFiles(e.target.files)}
+/>
 
-                <button type="submit" className="send-button" disabled={(!text.trim() && !attachments.length) || busy} aria-label="Invia">
-                  {busy ? <LoaderCircle className="spin" size={20} /> : <ArrowUp size={21} />}
-                </button>
-              </form>
+<input
+  ref={imageRef}
+  type="file"
+  hidden
+  multiple
+  accept="image/*"
+  onChange={e => addFiles(e.target.files)}
+/>
 
-              <input ref={fileRef} type="file" hidden multiple accept="image/*,.pdf,.txt,.md,.csv" onChange={e => addFiles(e.target.files)} />
-              <input ref={imageRef} type="file" hidden multiple accept="image/*" onChange={e => addFiles(e.target.files)} />
-              <footer>Veyra può commettere errori. Verifica le informazioni importanti.</footer>
-            </div>
-          </>
-        )}
-      </main>
+<footer>
+  Veyra può commettere errori. Verifica le informazioni importanti.
+</footer>
+</div>
+</>
+)}
+</section>
+</>
+)}
 
-    {showSettings && (
+</main>
+
+{showSettings && (
   <div className="overlay" onClick={() => setShowSettings(false)}>
     <div className="modal" onClick={e => e.stopPropagation()}>
       <button className="close" onClick={() => setShowSettings(false)} aria-label="Chiudi">
