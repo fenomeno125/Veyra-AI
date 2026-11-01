@@ -153,6 +153,7 @@ function MessageContent({ content }) {
     </div>
   );
 }
+
 function MessageImages({ images = [], onEdit, onOpen }) {
   const validImages = images.filter(
     src => typeof src === 'string' &&
