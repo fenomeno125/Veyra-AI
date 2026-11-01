@@ -2225,3 +2225,19 @@ input:focus-visible {
     width: 100%;
   }
 }
+.lightbox-close {
+  z-index: 10001;
+  position: absolute;
+  top: 20px;
+  right: 25px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  color: white;
+  background: #333;
+  cursor: pointer;
+}
