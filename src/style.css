@@ -2198,3 +2198,30 @@ input:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* IMMAGINI GENERATE PIÙ GRANDI */
+
+.sent-images {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sent-image-link {
+  flex: 0 1 520px;
+  width: min(520px, 100%);
+  max-width: 100%;
+}
+
+.sent-image-link img {
+  width: 100%;
+  height: auto;
+  max-height: 650px;
+  object-fit: contain;
+}
+
+@media (max-width: 540px) {
+  .sent-image-link {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}
