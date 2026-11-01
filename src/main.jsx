@@ -872,24 +872,29 @@ function chooseTool(id) {
                       {tools.map(tool => {
                         const Icon = tool.icon;
                         return (
-                          <button type="button" className="tool-option" key={tool.id} onClick={() => chooseTool(tool.id)}>
-                            <span className="tool-icon"><Icon size={19} /></span>
-                            <span className="tool-copy"><b>
-  {tool.id === 'web' && toolMode === 'web'
-    ? 'Disattiva ricerca web'
-    : tool.label}
-</b>
-<small>
-  {tool.id === 'web' && toolMode === 'web'
-    ? 'Torna alla chat normale'
-    : tool.desc}
-</small>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                         <button
+  type="button"
+  className="tool-option"
+  key={tool.id}
+  onClick={() => chooseTool(tool.id)}
+>
+  <span className="tool-icon">
+    <Icon size={19} />
+  </span>
+
+  <span className="tool-copy">
+    <b>
+      {tool.id === 'web' && toolMode === 'web'
+        ? 'Disattiva ricerca web'
+        : tool.label}
+    </b>
+    <small>
+      {tool.id === 'web' && toolMode === 'web'
+        ? 'Torna alla chat normale'
+        : tool.desc}
+    </small>
+  </span>
+</button>
 
                 <textarea
                   ref={textareaRef}
