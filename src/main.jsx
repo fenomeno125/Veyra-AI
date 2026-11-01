@@ -64,14 +64,14 @@ async function postJSON(url, body) {
   const raw = await response.text();
   let data;
 
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      'Risposta del server non valida. Controlla che il backend sia configurato.'
-    );
-  }
-
+ try {
+  data = JSON.parse(raw);
+} catch {
+  throw new Error(
+    `Risposta non JSON (${response.status}): ${raw.slice(0, 300)}`
+  );
+}
+  
   if (!response.ok) {
     if (response.status === 429) {
       throw new Error(
