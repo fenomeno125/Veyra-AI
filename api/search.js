@@ -1,9 +1,6 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({
-      error: "Metodo non consentito. Usa POST."
-    });
+    return res.status(405).json({ error: "Metodo non consentito." });
   }
 
   const apiKey = process.env.TAVILY_API_KEY;
@@ -14,20 +11,11 @@ export default async function handler(req, res) {
     });
   }
 
-  const query =
-    typeof req.body?.query === "string"
-      ? req.body.query.trim()
-      : "";
+  const query = req.body?.query?.trim();
 
   if (!query) {
     return res.status(400).json({
-      error: "Inserisci una ricerca."
-    });
-  }
-
-  if (query.length > 400) {
-    return res.status(400).json({
-      error: "La ricerca è troppo lunga."
+      error: "Inserisci cosa vuoi cercare."
     });
   }
 
@@ -40,43 +28,39 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         api_key: apiKey,
         query,
-        search_depth: "basic",
         topic: "general",
-        max_results: 5,
-        include_answer: true
+        search_depth: "basic",
+        include_answer: true,
+        max_results: 5
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Errore Tavily:", response.status);
-
-      return res.status(502).json({
-        error: "La ricerca web non è riuscita."
+      return res.status(response.status).json({
+        error: data.detail || data.error || "Errore durante la ricerca web."
       });
     }
 
-    const results = Array.isArray(data.results)
-      ? data.results.map(item => ({
-          title: item.title || "Risultato senza titolo",
-          url: item.url || "",
-          content: item.content || ""
-        }))
-      : [];
+    const results = (data.results || []).map(item => ({
+      title: item.title || "Risultato senza titolo",
+      url: item.url || "",
+      domain: item.url ? new URL(item.url).hostname : "",
+      snippet: item.content || ""
+    }));
 
     return res.status(200).json({
-      query,
+      reply: data.answer || "Ecco i risultati trovati.",
       answer: data.answer || "",
-      reply: data.answer || "",
       results
     });
 
   } catch (error) {
-    console.error("Errore ricerca:", error);
+    console.error("Errore Tavily:", error);
 
     return res.status(500).json({
-      error: "Errore interno durante la ricerca."
+      error: "Impossibile completare la ricerca web."
     });
   }
 }
