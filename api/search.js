@@ -1,3 +1,4 @@
+
 const MODEL = "openai/gpt-oss-120b";
 
 export default async function handler(req, res) {
@@ -5,7 +6,9 @@ export default async function handler(req, res) {
 
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "Metodo non consentito." });
+    return res.status(405).json({
+      error: "Metodo non consentito."
+    });
   }
 
   const apiKey = process.env.GROQ_API_KEY;
@@ -58,7 +61,6 @@ export default async function handler(req, res) {
           ],
           tools: [{ type: "browser_search" }],
           tool_choice: "required",
-          citation_options: "enabled",
           reasoning_effort: "low",
           max_completion_tokens: 2500,
           temperature: 1,
@@ -69,17 +71,17 @@ export default async function handler(req, res) {
 
     const data = await response.json().catch(() => ({}));
 
-   if (!response.ok) {
-  console.error("Groq browser search error:", {
-    status: response.status,
-    error: data?.error
-  });
+    if (!response.ok) {
+      console.error("Groq browser search error:", {
+        status: response.status,
+        error: data?.error
+      });
 
-  return res.status(502).json({
-    error: data?.error?.message || "Errore Groq sconosciuto.",
-    status: response.status
-  });
-}
+      return res.status(502).json({
+        error: data?.error?.message || "Errore Groq sconosciuto.",
+        status: response.status
+      });
+    }
 
     const message = data?.choices?.[0]?.message;
     const reply = message?.content;
@@ -90,7 +92,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Estrae le citazioni solo se Groq le restituisce davvero.
     const citations = Array.isArray(message?.citations)
       ? message.citations
       : [];
@@ -98,6 +99,8 @@ export default async function handler(req, res) {
     const results = citations
       .map((citation) => {
         if (typeof citation === "string") {
+          if (!/^https?:\/\//i.test(citation)) return null;
+
           return {
             title: citation,
             url: citation,
@@ -108,8 +111,10 @@ export default async function handler(req, res) {
 
         const url = citation?.url || citation?.uri || "";
 
-        if (typeof url !== "string" ||
-            !/^https?:\/\//i.test(url)) {
+        if (
+          typeof url !== "string" ||
+          !/^https?:\/\//i.test(url)
+        ) {
           return null;
         }
 
