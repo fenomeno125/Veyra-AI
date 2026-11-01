@@ -80,7 +80,8 @@ export default async function handler(req, res) {
       });
     }
 
-    const reply = data?.choices?.[0]?.message?.content;
+    const message = data?.choices?.[0]?.message;
+    const reply = message?.content;
 
     if (typeof reply !== "string" || !reply.trim()) {
       return res.status(502).json({
@@ -88,9 +89,41 @@ export default async function handler(req, res) {
       });
     }
 
+    // Estrae le citazioni solo se Groq le restituisce davvero.
+    const citations = Array.isArray(message?.citations)
+      ? message.citations
+      : [];
+
+    const results = citations
+      .map((citation) => {
+        if (typeof citation === "string") {
+          return {
+            title: citation,
+            url: citation,
+            domain: "",
+            snippet: ""
+          };
+        }
+
+        const url = citation?.url || citation?.uri || "";
+
+        if (typeof url !== "string" ||
+            !/^https?:\/\//i.test(url)) {
+          return null;
+        }
+
+        return {
+          title: citation.title || citation.name || url,
+          url,
+          domain: citation.domain || "",
+          snippet: citation.snippet || citation.description || ""
+        };
+      })
+      .filter(Boolean);
+
     return res.status(200).json({
       reply: reply.trim(),
-      sources: []
+      results
     });
 
   } catch (error) {
