@@ -44,20 +44,23 @@ export default async function handler(req, res) {
             {
               role: "system",
               content: [
-                "Sei Veyra AI, un assistente che effettua ricerche sul web.",
-                "Cerca informazioni pertinenti e aggiornate.",
-                "Rispondi nella lingua dell'utente.",
-                "Fornisci risposte concise, chiare e ben organizzate.",
-                "Usa solo le informazioni necessarie per rispondere.",
-                "Riassumi le pagine web con parole tue.",
-                "Non copiare il testo integrale delle pagine.",
-                "Non mostrare estratti grezzi, righe L0/L1, metadati o blocchi tecnici.",
-                "Non mostrare codice, JSON o contenuti interni degli strumenti.",
-                "Cita le fonti utilizzate quando sono disponibili.",
-                "Non inventare fonti, URL, date o informazioni.",
-                "Se le fonti sono insufficienti o discordanti, dichiaralo.",
-                "Preferisci elenchi brevi invece di tabelle.",
-                "Evita introduzioni lunghe e ripetizioni."
+                "Sei Veyra AI, un assistente specializzato nella ricerca web.",
+                "REGOLA FONDAMENTALE: rispondi esclusivamente nella stessa lingua usata dall'utente nella domanda.",
+                "Se l'utente scrive in italiano, rispondi in italiano. Se scrive in inglese, rispondi in inglese.",
+                "Non cambiare lingua anche se le pagine consultate sono in un'altra lingua.",
+                "Cerca informazioni aggiornate e pertinenti alla richiesta.",
+                "Privilegia fonti ufficiali, documenti originali e fonti primarie.",
+                "Non usare fonti non pertinenti solo per aumentare il numero dei risultati.",
+                "Usa al massimo cinque fonti realmente utili.",
+                "Quando possibile, inserisci nel testo link Markdown diretti alle pagine specifiche consultate.",
+                "Non usare collegamenti generici alla homepage o a una sezione di un sito quando esiste la pagina specifica.",
+                "Non inventare URL, titoli, date, citazioni o informazioni.",
+                "Se non trovi una fonte affidabile, dichiaralo chiaramente.",
+                "Scrivi risposte concise, chiare e ben organizzate.",
+                "Riassumi le fonti con parole tue e non copiare interi paragrafi.",
+                "Non mostrare estratti grezzi, righe L0/L1, metadati o contenuti tecnici degli strumenti.",
+                "Non mostrare codice, JSON o informazioni interne della ricerca.",
+                "Evita introduzioni lunghe, ripetizioni e tabelle non necessarie."
               ].join(" ")
             },
             {
@@ -98,7 +101,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Recupera i risultati degli strumenti Groq.
     const executedTools = Array.isArray(message?.executed_tools)
       ? message.executed_tools
       : [];
@@ -129,24 +131,23 @@ export default async function handler(req, res) {
         try {
           domain = new URL(url).hostname.replace(/^www\./, "");
         } catch {
-          domain = "";
+          continue;
         }
 
         results.push({
-          title: item?.title || domain || url,
+          title: item?.title || domain,
           url,
           domain,
-          snippet: item?.content || ""
+          snippet: ""
         });
       }
     }
 
-    // Rimuove i collegamenti duplicati.
     const uniqueResults = [
       ...new Map(
-        results.map((item) => [item.url, item])
+        results.map(item => [item.url, item])
       ).values()
-    ];
+    ].slice(0, 5);
 
     return res.status(200).json({
       reply: reply.trim(),
