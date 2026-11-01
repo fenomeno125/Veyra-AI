@@ -86,8 +86,53 @@ async function postJSON(url, body) {
   return data;
 }
 
+
 function MessageContent({ content }) {
   const blocks = String(content || '').split(/```/);
+
+  function renderInline(text) {
+    const cleanText = text.replace(/【[^】]*】/g, '');
+
+    const regex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|<((?:https?:\/\/)[^>]+)>|(https?:\/\/[^\s<]+)/g;
+
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+
+    while ((match = regex.exec(cleanText)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(cleanText.slice(lastIndex, match.index));
+      }
+
+      const label = match[1];
+      const markdownUrl = match[2];
+      const angleUrl = match[3];
+      const rawUrl = match[4];
+
+      const url = markdownUrl || angleUrl || rawUrl;
+      const title = label || url;
+
+      parts.push(
+        <a
+          key={key++}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {title}
+        </a>
+      );
+
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < cleanText.length) {
+      parts.push(cleanText.slice(lastIndex));
+    }
+
+    return parts;
+  }
 
   return (
     <div className="message-content">
@@ -121,17 +166,23 @@ function MessageContent({ content }) {
             {block.split('\n').map((line, i) => {
               const value = line.trim();
 
-              if (!value) return <div className="line-space" key={i} />;
+              if (!value) {
+                return <div className="line-space" key={i} />;
+              }
 
               if (/^#{1,3}\s/.test(value)) {
-                return <h3 key={i}>{value.replace(/^#{1,3}\s/, '')}</h3>;
+                return (
+                  <h3 key={i}>
+                    {renderInline(value.replace(/^#{1,3}\s/, ''))}
+                  </h3>
+                );
               }
 
               if (/^[-*]\s/.test(value)) {
                 return (
                   <div className="formatted-list" key={i}>
                     <span>•</span>
-                    <span>{value.slice(2)}</span>
+                    <span>{renderInline(value.slice(2))}</span>
                   </div>
                 );
               }
@@ -140,12 +191,14 @@ function MessageContent({ content }) {
                 return (
                   <div className="formatted-list" key={i}>
                     <span>{value.match(/^\d+/)[0]}.</span>
-                    <span>{value.replace(/^\d+[.)]\s/, '')}</span>
+                    <span>
+                      {renderInline(value.replace(/^\d+[.)]\s/, ''))}
+                    </span>
                   </div>
                 );
               }
 
-              return <p key={i}>{value}</p>;
+              return <p key={i}>{renderInline(value)}</p>;
             })}
           </div>
         );
