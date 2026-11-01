@@ -254,6 +254,7 @@ function fileToDataURL(file) {
 }
 
 function App() {
+  const [editingImage, setEditingImage] = useState(null);
   const [conversations, setConversations] = useState(readConversations);
   const [activeId, setActiveId] = useState(null);
   const [text, setText] = useState('');
