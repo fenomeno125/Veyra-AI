@@ -1,66 +1,103 @@
+const MODEL = "openai/gpt-oss-120b";
+
 export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+
   if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Metodo non consentito." });
   }
 
-  const apiKey = process.env.TAVILY_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    return res.status(500).json({
-      error: "TAVILY_API_KEY non configurata su Vercel."
+    return res.status(503).json({
+      error: "Manca GROQ_API_KEY nelle variabili d'ambiente di Vercel."
     });
   }
 
-  const query = req.body?.query?.trim();
+  const query = typeof req.body?.query === "string"
+    ? req.body.query.trim().slice(0, 2000)
+    : "";
 
   if (!query) {
     return res.status(400).json({
-      error: "Inserisci cosa vuoi cercare."
+      error: "Scrivi cosa vuoi cercare."
     });
   }
 
   try {
-    const response = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        topic: "general",
-        search_depth: "basic",
-        include_answer: true,
-        max_results: 5
-      })
-    });
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [
+            {
+              role: "system",
+              content: [
+                "Sei Veyra AI, un assistente che effettua ricerche sul web.",
+                "Cerca informazioni pertinenti e aggiornate alla domanda.",
+                "Rispondi nella lingua dell'utente.",
+                "Distingui i fatti verificabili dalle ipotesi.",
+                "Cita le fonti utilizzate quando sono disponibili.",
+                "Non inventare fonti, URL, date o informazioni.",
+                "Se le fonti sono insufficienti o discordanti, dichiaralo.",
+                "Organizza la risposta in modo chiaro e naturale."
+              ].join(" ")
+            },
+            {
+              role: "user",
+              content: query
+            }
+          ],
+          tools: [{ type: "browser_search" }],
+          tool_choice: "required",
+          citation_options: "enabled",
+          reasoning_effort: "low",
+          max_completion_tokens: 2500,
+          temperature: 1,
+          stream: false
+        })
+      }
+    );
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      return res.status(response.status).json({
-        error: data.detail || data.error || "Errore durante la ricerca web."
+      console.error("Groq browser search error:", {
+        status: response.status,
+        error: data?.error?.message
+      });
+
+      return res.status(502).json({
+        error: "La ricerca web non è riuscita. Controlla il modello e riprova."
       });
     }
 
-    const results = (data.results || []).map(item => ({
-      title: item.title || "Risultato senza titolo",
-      url: item.url || "",
-      domain: item.url ? new URL(item.url).hostname : "",
-      snippet: item.content || ""
-    }));
+    const reply = data?.choices?.[0]?.message?.content;
+
+    if (typeof reply !== "string" || !reply.trim()) {
+      return res.status(502).json({
+        error: "La ricerca non ha restituito una risposta valida."
+      });
+    }
 
     return res.status(200).json({
-      reply: data.answer || "Ecco i risultati trovati.",
-      answer: data.answer || "",
-      results
+      reply: reply.trim(),
+      sources: []
     });
 
   } catch (error) {
-    console.error("Errore Tavily:", error);
+    console.error("Veyra search error:", error?.message || error);
 
     return res.status(500).json({
-      error: "Impossibile completare la ricerca web."
+      error: "Errore durante la ricerca web."
     });
   }
 }
