@@ -314,6 +314,10 @@ function fileToDataURL(file) {
 
 function App() {
   const [conversations, setConversations] = useState(readConversations);
+  const [projects, setProjects] = useState(() => {
+    try { const saved = JSON.parse(localStorage.getItem('veyra-projects-v1') || '[]'); return Array.isArray(saved) ? saved : []; }
+    catch { return []; }
+  });
   const [activeId, setActiveId] = useState(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -337,6 +341,14 @@ function App() {
 
   const active = conversations.find(c => c.id === activeId);
   const msgs = active?.messages || [];
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('veyra-projects-v1', JSON.stringify(projects));
+    } catch (error) {
+      console.warn('Impossibile salvare i progetti:', error);
+    }
+  }, [projects]);
 
   useEffect(() => {
     try {
@@ -718,6 +730,31 @@ function chooseTool(id) {
     ['💡', 'Idee', 'Dammi 10 idee originali per un progetto digitale.']
   ];
 
+  function createProject() {
+    const name = window.prompt('Nome del nuovo progetto:');
+    if (!name?.trim()) return;
+    const description = window.prompt('Descrizione (facoltativa):') || '';
+    const project = { id: createId(), name: name.trim().slice(0, 70), description: description.trim().slice(0, 240), createdAt: Date.now() };
+    setProjects(old => [project, ...old]);
+    setNotice('Progetto creato e salvato in questo browser.');
+  }
+
+  function openProject(project) {
+    const chat = newConversation();
+    chat.title = `Progetto: ${project.name}`;
+    chat.messages = project.description ? [{ role: 'assistant', content: `**Progetto: ${project.name}**\n\n${project.description}\n\nQuesta conversazione è dedicata al progetto. Puoi iniziare a lavorarci qui.` }] : [];
+    setConversations(old => [chat, ...old]);
+    setActiveId(chat.id);
+    setSection('Chat');
+    setToolMode('chat');
+    setNotice('');
+  }
+
+  function deleteProject(id) {
+    if (!window.confirm('Eliminare questo progetto?')) return;
+    setProjects(old => old.filter(project => project.id !== id));
+  }
+
   function selectSection(label) {
     setSection(label === 'Recenti' ? 'Chat' : label);
     setNotice(
@@ -838,20 +875,56 @@ function chooseTool(id) {
         </header>
 
         {section !== 'Chat' ? (
-          <section className="section-page">
+          <section className="section-page section-page-wide">
             <div className="section-symbol"><Sparkles size={27} /></div>
             <h1>{section}</h1>
-            <p>Questa sezione è pronta per essere sviluppata.</p>
-            {section === 'Immagini' && (
+            {section === 'Progetti' ? (
               <>
-                <button className="primary-button" onClick={() => chooseTool('image')}>
-                  <ImagePlus size={18} /> Crea un’immagine
-                </button>
-                <button className="secondary-button" onClick={() => imageRef.current?.click()}>
-                  <Images size={18} /> Analizza un’immagine
-                </button>
+                <p>Crea uno spazio per organizzare idee e conversazioni. I progetti vengono salvati solo in questo browser.</p>
+                <button className="primary-button" onClick={createProject}><Plus size={17} /> Nuovo progetto</button>
+                <div className="project-grid">
+                  {projects.map(project => (
+                    <article className="project-card" key={project.id}>
+                      <div><FolderKanban size={20} /><span>{new Date(project.createdAt).toLocaleDateString('it-IT')}</span></div>
+                      <h3>{project.name}</h3>
+                      <p>{project.description || 'Nessuna descrizione.'}</p>
+                      <footer>
+                        <button className="primary-button" onClick={() => openProject(project)}>Apri progetto</button>
+                        <button className="icon-button" onClick={() => deleteProject(project.id)} aria-label="Elimina progetto"><Trash2 size={16} /></button>
+                      </footer>
+                    </article>
+                  ))}
+                  {!projects.length && <p className="empty-projects">Non hai ancora creato progetti.</p>}
+                </div>
               </>
-            )}
+            ) : section === 'Esplora' ? (
+              <>
+                <p>Parti da un modello: scegli un’attività e Veyra preparerà la chat.</p>
+                <div className="explore-grid">
+                  {promptCards.map(([icon, title, prompt]) => (
+                    <button key={title} className="explore-card" onClick={() => { setSection('Chat'); startChat(); setTimeout(() => send(prompt), 0); }}>
+                      <strong>{icon} {title}</strong><span>{prompt}</span>
+                    </button>
+                  ))}
+                  <button className="explore-card" onClick={() => { setSection('Chat'); chooseTool('web'); }}><strong>🌐 Ricerca web</strong><span>Trova informazioni aggiornate e fonti online.</span></button>
+                  <button className="explore-card" onClick={() => { setSection('Chat'); chooseTool('code'); }}><strong>💻 Programmazione</strong><span>Ragiona su codice, errori e idee software.</span></button>
+                </div>
+              </>
+            ) : section === 'Immagini' ? (
+              <>
+                <p>Crea immagini da una descrizione o allega una foto per discuterne in chat.</p>
+                <button className="primary-button" onClick={() => { setSection('Chat'); chooseTool('image'); }}><ImagePlus size={18} /> Crea un’immagine</button>
+                <button className="secondary-button" onClick={() => { setSection('Chat'); imageRef.current?.click(); }}><Images size={18} /> Analizza un’immagine</button>
+              </>
+            ) : section === 'Libreria' ? (
+              <p>La cronologia delle conversazioni è disponibile nella barra laterale. Una libreria di file condivisa tra dispositivi richiede ancora un archivio dedicato.</p>
+            ) : section === 'Programmate' ? (
+              <><p>Le attività automatiche non sono ancora attive: richiedono un servizio pianificatore lato server, che non è stato configurato.</p><div className="feature-status">Disponibile ora: promemoria da copiare nel calendario del dispositivo.</div></>
+            ) : section === 'Plugin' ? (
+              <><p>Le integrazioni esterne richiedono collegamenti OAuth e autorizzazioni per ogni servizio.</p><div className="feature-status">Nessun account esterno è stato collegato o autorizzato.</div></>
+            ) : section === 'Codex' ? (
+              <><p>Puoi chiedere a Veyra di spiegare, scrivere e correggere codice nella chat. Un ambiente di esecuzione isolato per progetti completi non è ancora configurato.</p><button className="primary-button" onClick={() => { setSection('Chat'); setText('Aiutami a lavorare su un progetto di programmazione.'); }}>Apri assistente codice</button></>
+            ) : null}
             <button className="secondary-button" onClick={() => setSection('Chat')}>Torna alla chat</button>
           </section>
         ) : (
