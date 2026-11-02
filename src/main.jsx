@@ -902,7 +902,7 @@ function chooseTool(id) {
                 <p>Parti da un modello: scegli un’attività e Veyra preparerà la chat.</p>
                 <div className="explore-grid">
                   {promptCards.map(([icon, title, prompt]) => (
-                    <button key={title} className="explore-card" onClick={() => { setSection('Chat'); startChat(); setTimeout(() => send(prompt), 0); }}>
+                    <button key={title} className="explore-card" onClick={() => { startChat(); setText(prompt); }}>
                       <strong>{icon} {title}</strong><span>{prompt}</span>
                     </button>
                   ))}
