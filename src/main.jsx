@@ -609,20 +609,41 @@ function editImage(src) {
         };
 
         setEditingImage(null);
-      } else {
-        const data = await postJSON('/api/chat', {
-          messages: next.slice(-20).map(message => ({
-            role: message.role,
-            content: message.content
-          })),
-          images: imageData
-        });
+  } else {
+  const apiMessages = next.slice(-20).map((message, index, array) => {
+    const isCurrentMessage = index === array.length - 1;
 
-        assistantMessage = {
-          role: 'assistant',
-          content: data.reply || 'Non ho ricevuto una risposta.'
-        };
-      }
+    if (message.role === 'user' && isCurrentMessage && imageData.length) {
+      return {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: message.content
+          },
+          ...imageData.map(url => ({
+            type: 'image_url',
+            image_url: { url }
+          }))
+        ]
+      };
+    }
+
+    return {
+      role: message.role,
+      content: message.content
+    };
+  });
+
+  const data = await postJSON('/api/chat', {
+    messages: apiMessages
+  });
+
+  assistantMessage = {
+    role: 'assistant',
+    content: data.reply || 'Non ho ricevuto una risposta.'
+  };
+}
 
       setConversations(old => old.map(c =>
         c.id === chatId
