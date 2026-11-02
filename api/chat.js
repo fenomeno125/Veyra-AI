@@ -210,9 +210,11 @@ export default async function handler(req, res) {
       ? "smart"
       : requestedMode;
 
-    const model = mode === "web"
-      ? (process.env.GROQ_WEB_MODEL || "openai/gpt-oss-120b")
-      : (process.env.GROQ_MODEL || "qwen/qwen3.8-27b");
+    const model = containsImages
+  ? "qwen/qwen3.8-27b"
+  : mode === "web"
+    ? (process.env.GROQ_WEB_MODEL || "openai/gpt-oss-120b")
+    : (process.env.GROQ_MODEL || "qwen/qwen3.8-27b");
 
     const payload = {
       model,
